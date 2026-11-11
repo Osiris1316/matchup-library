@@ -1,12 +1,14 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "matchup-library",
-  "main": "src/worker.js",
+  "main": "packages/api/src/worker.ts",
   "compatibility_date": "2026-10-01",
-  // The page and the civ flags. Requests that match a file are served
-  // directly; everything else (the /api routes) reaches the Worker.
+  // One Worker serves the built page and the API, so one Access setting covers
+  // the whole site. Requests that match a built file are served directly;
+  // everything else (the /api routes) reaches the Worker.
+  // Build the page first: `pnpm build:web` (or `pnpm deploy`, which does both).
   "assets": {
-    "directory": "./public",
+    "directory": "./packages/web/dist",
     "binding": "ASSETS"
   },
   "d1_databases": [
@@ -15,7 +17,7 @@
       "database_name": "matchup-library",
       // Replace with the database_id that `npx wrangler d1 create matchup-library` prints.
       "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
-      "migrations_dir": "migrations"
+      "migrations_dir": "packages/core/src/db/migrations"
     }
   ],
   "observability": {

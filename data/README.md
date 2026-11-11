@@ -8,5 +8,5 @@ Library data goes here and stays out of git (see `.gitignore`), because the repo
 For your latest data, download a fresh copy from the preview (Upkeep, then Download a copy), save it here, and convert it:
 
 ```powershell
-node scripts/import-preview.mjs data\preview-download.json data\import.sql
+pnpm import-preview data\preview-download.json data\import.sql
 ```

@@ -4,17 +4,23 @@ An Age of Empires IV study notebook. Define elements and plays, tag what each ci
 
 One Cloudflare Worker serves the page and a small API. Everything is saved in D1. Sign-in is Cloudflare Access, and the API checks the Access token itself as well, so it stays closed if Access is ever turned off.
 
+It's a pnpm workspace in TypeScript, laid out like the league manager: `core` holds the shared types and rules, `api` is the Worker, `web` is the React page.
+
 ## What's in the repo
 
 | Path | What it is |
 | --- | --- |
-| `public/index.html` | The app. The same page as the claude.ai preview, saving through the API. |
-| `public/flags/` | Civ flags, from the league manager. |
-| `src/worker.js` | The Worker: serves `/api/state` and `/api/commit`, checks sign-in. |
-| `src/docs.js` | Maps the page's records to D1 rows and back. Also used by the import script. |
-| `migrations/0001_initial_schema.sql` | The D1 schema. |
-| `scripts/import-preview.mjs` | Turns a preview download into SQL for D1. |
-| `scripts/build-page.py` | How `public/index.html` was made from the preview page. Not needed day to day. |
+| `packages/core/src/types.ts` | The records the app works with: civs, maps, elements, plays, tags, games, links. |
+| `packages/core/src/library.ts` | The matchup rules: what a civ is documented doing on a map, and why. |
+| `packages/core/src/docs.ts` | Maps records to D1 rows and back. Used by the Worker and the import script. |
+| `packages/core/src/text.ts` | Formatting and link helpers (times, YouTube and Twitch links). |
+| `packages/core/src/db/migrations/` | The D1 schema. |
+| `packages/core/test/` | Tests for the rules and for the trip through the schema (`pnpm test`). |
+| `packages/api/src/worker.ts` | The Worker (Hono): `/api/state`, `/api/commit`, and the page from the assets. |
+| `packages/api/src/auth.ts` | The Access token check. |
+| `packages/web/src/` | The page (React and Vite): `views/` for screens, `sheets/` for the pop-up sheets, `components/`, `styles/global.css`. |
+| `packages/web/public/flags/` | Civ flags, from the league manager. |
+| `scripts/import-preview.ts` | Turns a preview download into SQL for D1. |
 | `data/` | Your library data (kept out of git). Includes a snapshot from November 10. |
 | `docs/deferred-views.sql` | Matchup and coverage views from the design stage, set aside for later. |
 | `test/e2e.cjs` | The browser test run before handover (optional, needs Playwright). |
@@ -34,7 +40,7 @@ git add .
 git status
 ```
 
-`git status` should list `public`, `src`, `migrations`, `scripts`, `docs`, `test`, `data/README.md` and the config files. It should **not** list the JSON or SQL files in `data`, `.dev.vars` or `node_modules`.
+`git status` should list `packages`, `scripts`, `docs`, `test`, `data/README.md` and the config files. It should **not** list the JSON or SQL files in `data`, `.dev.vars`, `node_modules` or any `dist` folder.
 
 ```powershell
 git commit -m "Matchup Library v1"
@@ -45,12 +51,13 @@ git push -u origin main
 ### 2. Install and sign in to Cloudflare
 
 ```powershell
-npm install
+pnpm --version
+pnpm install
 npx wrangler login
 npx wrangler whoami
 ```
 
-`whoami` should show your Cloudflare account.
+`pnpm --version` should print 10 or later. If it isn't found, run `npm install -g pnpm` first. `pnpm install` should end with `Done`, and `whoami` should show your Cloudflare account.
 
 ### 3. Create the database
 
@@ -58,7 +65,7 @@ npx wrangler whoami
 npx wrangler d1 create matchup-library
 ```
 
-It prints a `database_id`. Open `wrangler.jsonc` and paste it over `REPLACE_WITH_YOUR_DATABASE_ID`. If Wrangler offers to add the binding for you, say no. If it added an entry anyway, delete it, so `d1_databases` holds exactly one entry: binding `DB`, database name `matchup-library`, your id, and `migrations_dir` `migrations`.
+It prints a `database_id`. Open `wrangler.jsonc` and paste it over `REPLACE_WITH_YOUR_DATABASE_ID`. If Wrangler offers to add the binding for you, say no. If it added an entry anyway, delete it, so `d1_databases` holds exactly one entry: binding `DB`, database name `matchup-library`, your id, and `migrations_dir` `packages/core/src/db/migrations`.
 
 ```powershell
 npx wrangler d1 list
@@ -69,7 +76,7 @@ npx wrangler d1 list
 ### 4. Create the tables
 
 ```powershell
-npx wrangler d1 migrations apply matchup-library --remote
+pnpm migrate:remote
 ```
 
 It asks to confirm, then shows `0001_initial_schema.sql` with a tick. Check:
@@ -85,7 +92,7 @@ npx wrangler d1 execute matchup-library --remote --command "SELECT COUNT(*) AS f
 The `data` folder has a snapshot from November 10 with 32 tags. If you've changed anything in the preview since, take a fresh copy: open the preview on claude.ai, open Upkeep, choose **Download a copy**, and save the file into `data` as `preview-download.json`. Then convert it:
 
 ```powershell
-node scripts/import-preview.mjs data\preview-download.json data\import.sql
+pnpm import-preview data\preview-download.json data\import.sql
 ```
 
 It prints how many civs, maps, elements, plays, tags, games and links it found. Load it:
@@ -105,10 +112,10 @@ The counts should match what the import script printed.
 ### 6. Deploy the Worker
 
 ```powershell
-npx wrangler deploy
+pnpm run deploy
 ```
 
-It prints the address, `https://matchup-library.<your-subdomain>.workers.dev`. If you open it now, the page loads but says **Sign-in is not set up yet**. That's expected: the API stays closed until the next two steps are done.
+Use `pnpm run deploy`, not `pnpm deploy`, which is a different pnpm command. It builds the page, then deploys the Worker with it, and prints the address, `https://matchup-library.<your-subdomain>.workers.dev`. If you open it now, the page loads but says **Sign-in is not set up yet**. That's expected: the API stays closed until the next two steps are done.
 
 ### 7. Put it behind Cloudflare Access
 
@@ -151,17 +158,26 @@ Expect `302` (redirect to sign-in) or `403`, never `200`.
 
 ```powershell
 Copy-Item .dev.vars.example .dev.vars
-npm run migrate:local
+pnpm migrate:local
 npx wrangler d1 execute matchup-library --local --file data\import-2026-11-10.sql
-npm run dev
+pnpm dev
 ```
 
-Open http://localhost:8787. `.dev.vars` turns sign-in off locally. It's ignored by git and never deployed. Never set `ALLOW_NO_AUTH` on the real Worker.
+`pnpm dev` starts the Worker on port 8787 and the page on port 5173. Open http://localhost:5173: the page reloads as you edit it, and `/api` goes to the local Worker and its local D1. `.dev.vars` turns sign-in off locally. It's ignored by git and never deployed. Never set `ALLOW_NO_AUTH` on the real Worker.
+
+Before you push a change:
+
+```powershell
+pnpm typecheck
+pnpm test
+```
+
+`pnpm test` runs the rules tests and a round trip of records through the D1 schema in a local SQLite. The round trip needs Node 22.13 or later and is skipped on older versions. The browser test in `test/e2e.cjs` is optional: it needs Playwright, a fresh local database with the snapshot loaded, and `pnpm build:web` then `npx wrangler dev` running.
 
 ## Changing things later
 
-- Page or Worker changes: `npx wrangler deploy`.
-- Schema changes: add `migrations/0002_....sql`, run `npm run migrate:remote` first, then deploy. Ship the migration and the code that reads it together.
+- Page or Worker changes: `pnpm run deploy`.
+- Schema changes: add `packages/core/src/db/migrations/0002_....sql`, run `pnpm migrate:remote` first, then deploy. Ship the migration and the code that reads it together.
 - Watch live errors with `npx wrangler tail`.
 - Back up with **Download a copy** in Upkeep, or `npx wrangler d1 export matchup-library --remote --output backup.sql`.
 
@@ -171,9 +187,12 @@ Open http://localhost:8787. `.dev.vars` turns sign-in off locally. It's ignored 
 - **"The sign-in token was not valid"**: one of those two values is wrong. The team domain must be the full `https://<team>.cloudflareaccess.com`, and the audience tag must come from the application that protects this Worker.
 - **"Couldn't reach the library"** after the page has been open a while: your Access session expired. Reload to sign in again.
 - **A save fails**: the page reloads what is saved and tells you why. If it mentions another device, reload that device too. The page also refreshes itself when you come back to it after 30 seconds away.
+- **`wrangler deploy` says the assets directory is missing**: the page hasn't been built. Use `pnpm run deploy`, which builds it first.
 
 ## How saving works
 
-The page holds everything in memory, as the preview did. Each change goes to `/api/commit` as one batch of records, together with what the page saw before the change. `src/docs.js` turns those records into rows. A definition list (civs, maps, elements and so on) is saved item by item, so only the items you changed are written. The Worker writes the rows and an undo entry in `change_log` in a single D1 batch, so both succeed or neither does. Undo sends the earlier records back and removes the entry.
+The page holds everything in memory. Each change goes to `/api/commit` as one batch of records, together with what the page saw before the change. `packages/core/src/docs.ts` turns those records into rows. A definition list (civs, maps, elements and so on) is saved item by item, so only the items you changed are written. The Worker writes the rows and an undo entry in `change_log` in a single D1 batch, so both succeed or neither does. Undo sends the earlier records back and removes the entry.
 
-The schema's matchup and coverage views from the design stage aren't part of v1. The app works out matchups in the page, by rules that have moved on since then: whole-play tags, single-element game moments, guide moments with a civ, and parts matched by age. Those views are kept in `docs/deferred-views.sql` until they're rewritten.
+The page keeps one state object in `packages/web/src/store.ts`. Event handlers change it and call `emit()`, which re-renders the page. Saves and undo live in `packages/web/src/api/client.ts`, and what each button does in `packages/web/src/actions.ts`. Routes are the part after `#` in the address (`#library`, `#civ-ottomans`, `#ref-game-…`), so links from the first version keep working.
+
+The schema's matchup and coverage views from the design stage aren't part of v1. The app works out matchups with the rules in `packages/core/src/library.ts`: whole-play tags, single-element game moments, guide moments with a civ, and parts matched by age. Those views are kept in `docs/deferred-views.sql` until they're rewritten.

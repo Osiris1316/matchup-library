@@ -1,20 +1,25 @@
 {
   "name": "matchup-library",
-  "version": "1.0.0",
   "private": true,
-  "description": "AoE4 matchup library: elements, plays, civ tags, maps and references, on Cloudflare Workers and D1.",
   "type": "module",
+  "packageManager": "pnpm@10.28.0",
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev:api": "wrangler dev",
+    "dev:web": "cd packages/web && pnpm dev",
+    "dev": "pnpm build:web && concurrently \"pnpm dev:api\" \"pnpm dev:web\"",
+    "build:web": "cd packages/web && pnpm build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
     "migrate:local": "wrangler d1 migrations apply matchup-library --local",
     "migrate:remote": "wrangler d1 migrations apply matchup-library --remote",
-    "import-preview": "node scripts/import-preview.mjs"
-  },
-  "dependencies": {
-    "jose": "6.2.13"
+    "import-preview": "tsx scripts/import-preview.ts",
+    "deploy": "pnpm build:web && wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "4.151.3"
+    "@matchup-library/core": "workspace:*",
+    "concurrently": "9.2.5",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "wrangler": "4.153.0"
   }
 }

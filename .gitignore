@@ -1,6 +1,8 @@
 node_modules/
+dist/
 .wrangler/
 .dev.vars
+*.tsbuildinfo
 # Library data stays out of the public repo: downloads, snapshots and the SQL made from them.
 data/*
 !data/README.md
