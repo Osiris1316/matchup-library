@@ -1,0 +1,7 @@
+node_modules/
+.wrangler/
+.dev.vars
+# Library data stays out of the public repo: downloads, snapshots and the SQL made from them.
+data/*
+!data/README.md
+test/last-run.png

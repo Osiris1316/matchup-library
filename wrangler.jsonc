@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "matchup-library",
+  "main": "src/worker.js",
+  "compatibility_date": "2026-10-01",
+  // The page and the civ flags. Requests that match a file are served
+  // directly; everything else (the /api routes) reaches the Worker.
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "matchup-library",
+      // Replace with the database_id that `npx wrangler d1 create matchup-library` prints.
+      "database_id": "REPLACE_WITH_YOUR_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "observability": {
+    "enabled": true
+  }
+}
