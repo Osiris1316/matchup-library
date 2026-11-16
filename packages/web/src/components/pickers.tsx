@@ -1,9 +1,9 @@
 // Pickers used inside sheets: a dropdown checklist, a place picker, and the
 // step builder for plays and moments.
 import { Fragment, type ReactNode } from 'react';
-import { AGES, AGE_NAME, INTENT_NAME, agesText, builderToSteps, isActive, type Age, type BuilderRow } from '@matchup-library/core';
+import { AGES, INTENT_NAME, STAGE_AGES, STAGE_NAME, agesText, builderToSteps, type Age, type BuilderRow } from '@matchup-library/core';
 import { L, S, emit, type DefSheet, type MomentSheet, type PlaceDraft } from '../store';
-import { addStep, cycleAge, cycleIntent, elementGroups, setPlaceKind } from '../actions';
+import { addStep, cycleIntent, elementGroups, setPlaceKind } from '../actions';
 import { Icon } from './Icon';
 import { MapGroups, Seg } from './bits';
 import { SplitPill } from './Pill';
@@ -26,17 +26,23 @@ export function LandmarkOptions({ age }: { age?: Age | null }) {
 }
 
 // An age-up step can name its landmark.
-function StepLandmark({ b, i }: { b: BuilderRow; i: number }) {
+function StepLandmark({ b, i, age }: { b: BuilderRow; i: number; age: Age }) {
   if (L.elType(b.el) !== 'age_tech' || !L.subjects().some((x) => x.kind === 'landmark')) return null;
   return (
     <div className="step-sub">
       <select className="select" data-act="pb-subject" data-i={i} aria-label={'Landmark for ' + L.elName(b.el)} value={b.subject || ''}
         onChange={(e) => { if (e.target.value) b.subject = e.target.value; else delete b.subject; emit(); }}>
         <option value="">{L.el(b.el)?.subject ? 'Its usual icon' : 'No landmark'}</option>
-        <LandmarkOptions age={b.age} />
+        <LandmarkOptions age={age} />
       </select>
     </div>
   );
+}
+
+// The age a play or a moment's steps happen in. Imperial only shows when already chosen.
+export function AgeSeg({ value, onPick, act }: { value: Age; onPick: (a: Age) => void; act: string }) {
+  const ages: Age[] = STAGE_AGES.includes(value) ? STAGE_AGES : [...STAGE_AGES, value];
+  return <Seg label="Age" act={act} options={ages.map((a) => [a, STAGE_NAME[a]] as [Age, string])} current={value} onPick={onPick} />;
 }
 
 export interface MsOption { value: string; label: string; short?: string; flag?: ReactNode; sub?: string; group?: string }
@@ -118,14 +124,15 @@ export function PlacePicker({ owner }: { owner: { place: PlaceDraft } }) {
   );
 }
 
-// Elements in order. 'steps' edits a play; 'match' is a moment, which is one
-// element or a whole play, matched to a saved play when the steps agree.
+// Elements in order, all in one age. 'steps' edits a play; 'match' is a
+// moment, which is one element or a play, matched to a saved play in that age
+// when the steps agree.
 export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps' | 'match' }) {
   const d = sh.draft;
+  const age: Age = d.age;
   const togglePick = () => { sh.picking = !sh.picking; emit(); };
   const rows = d.builder.map((b, i) => {
-    const fixed = L.elAges(b.el).length === 1;
-    const ageLabel = b.age ? AGE_NAME[b.age] : 'Any age';
+    const wrongAge = !L.elAges(b.el).includes(age);
     const intentLabel = b.intent ? INTENT_NAME[b.intent] : 'Usual';
     return (
       <Fragment key={i + ':' + b.el}>
@@ -141,15 +148,12 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
           aria-label={'Intent: ' + intentLabel + '. Tap to change'}>
           <span className={'pill' + (b.intent ? '' : ' ghost')}>{intentLabel}</span>
         </button>
-        <button type="button" className="pill-btn age" data-act="pb-age" data-i={i} disabled={fixed} onClick={() => { cycleAge(b); emit(); }}
-          aria-label={fixed ? 'Always ' + ageLabel + ' Age' : 'Age: ' + ageLabel + '. Tap to change'}>
-          <span className={'pill' + (fixed ? ' plain' : b.age ? '' : ' ghost')}>{ageLabel}</span>
-        </button>
+        {wrongAge && <span className="pill warn" title={'Can\'t happen in ' + STAGE_NAME[age]}>Not {STAGE_NAME[age]}</span>}
         <button type="button" className="icon-btn" data-act="pb-remove" data-i={i} aria-label={'Remove ' + L.elName(b.el)} onClick={() => { d.builder.splice(i, 1); emit(); }}>
           <Icon name="x" size={16} w={2} />
         </button>
       </div>
-      <StepLandmark b={b} i={i} />
+      <StepLandmark b={b} i={i} age={age} />
       </Fragment>
     );
   });
@@ -159,7 +163,11 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
         <div key={g.name} className="picker-group">
           <span className="label">{g.name}</span>
           {g.items.map((e) => (
-            <button key={e.id} type="button" className="item" data-act="pb-add" data-id={e.id} onClick={() => { addStep(d.builder, e.id); sh.picking = false; emit(); }}>
+            <button key={e.id} type="button" className="item" data-act="pb-add" data-id={e.id} onClick={() => {
+              // A moment's first element sets its age when the age it had can't happen.
+              if (mode === 'match' && !d.builder.length && !L.elAges(e.id).includes(d.age)) d.age = L.elAges(e.id)[0] || d.age;
+              addStep(d.builder, e.id); sh.picking = false; emit();
+            }}>
               <SplitPill el={e.id} /><span className="sublabel">{agesText(L.elAges(e.id))}</span>
             </button>
           ))}
@@ -172,28 +180,28 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
       {sh.picking ? 'Close the list' : <><Icon name="plus" size={16} w={2} /> Add element</>}
     </button>
   );
-  const steps = builderToSteps(d.builder);
+  const steps = builderToSteps(d.builder, age);
   const first = steps[0];
   if (mode === 'match' && sh.kind === 'moment') {
     let after: ReactNode;
-    if (!first) after = <span className="hint">Pick one element, or several in order for a whole play.</span>;
-    else if (steps.length === 1) after = <span className="hint">One element: {L.stepLabel(first)}. Add more for a whole play.</span>;
+    if (!first) after = <span className="hint">Pick one element, or several in order for a play.</span>;
+    else if (steps.length === 1) after = <span className="hint">One element: {L.stepLabel(first)}, in {STAGE_NAME[age]}. Add more for a play.</span>;
     else {
-      const hit = L.matchPlay(d.builder, sh.draft.origStrategy);
+      const hit = L.matchPlay(d.builder, age, sh.draft.origPlay);
       after = hit
         ? <div className="panel"><span className="label">Matches a saved play</span><span className="strong">{hit.name}</span><span className="hint">{L.sequence(steps)}</span></div>
         : <div className="panel">
             <span className="label">New play</span>
             <label className="sublabel" htmlFor="mo-name">Name it</label>
             <input id="mo-name" className="input" type="text" autoComplete="off" placeholder={L.sequence(steps)} value={d.name || ''} onChange={(e) => { d.name = e.target.value; emit(); }} />
-            <span className="hint">It goes into Library when you save.</span>
+            <span className="hint">It goes into Library as a {STAGE_NAME[age]} play when you save.</span>
           </div>;
     }
-    return <div className="field"><span className="label">What happened</span>{rows}{addBtn}{picker}{after}</div>;
+    return <div className="field"><span className="label">Steps</span><AgeSeg act="mo-age" value={age} onPick={(a) => { d.age = a; emit(); }} />{rows}{addBtn}{picker}{after}</div>;
   }
   const playId = sh.kind === 'def' ? sh.id : null;
-  const sig = steps.length ? L.signature(steps) : null;
-  const twin = sig ? S.data.defs.strategies.find((s) => s.id !== playId && isActive(s) && L.signature(s.steps) === sig) : null;
+  const hit = steps.length ? L.matchPlay(d.builder, age, playId) : null;
+  const twin = hit && hit.id !== playId ? hit : null;
   return (
     <div className="field">
       <span className="label">Steps</span>
@@ -201,8 +209,9 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
       {steps.length
         ? <span className="hint">{L.sequence(steps)}</span>
         : <span className="hint">Add elements in the order they happen. Switch "then" to "with" when two happen together.</span>}
-      {twin && <span className="hint warn-text">Same steps as {twin.name}.</span>}
-      {playId && L.allPlays().some(({ p }) => p.strategyId === playId) && <span className="hint">Games logged with this play keep pointing at it, so changing the steps changes what they mean.</span>}
+      {twin && <span className="hint warn-text">Same steps as {twin.name} in this age.</span>}
+      {playId && (L.allPlays().some(({ p }) => p.playId === playId) || L.activePlans().some((g) => AGES.some((a) => g.stages[a]?.play === playId)))
+        && <span className="hint">Game plans and games that use this play keep pointing at it, so changing the steps changes what they mean.</span>}
     </div>
   );
 }

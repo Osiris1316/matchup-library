@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type Intent, type ItemKind, type LibraryData,
-  type Outcome, type Place, type PlaceKind, type Prep, type Shows
+  type Outcome, type Place, type PlaceKind, type PlanStatus, type Prep, type Shows
 } from '@matchup-library/core';
 
 export type DbState = 'connecting' | 'ready' | 'unavailable' | 'unauthorized';
@@ -16,8 +16,9 @@ export interface DefDraft {
   name: string; description: string;
   kind: string; ages: Age[]; tells: string;                   // elements
   subject: string; intent: Intent | ''; universal: boolean; cannot: string[];
-  builder: BuilderRow[];                                      // plays
-  where: Place[]; whereNote: string; civOn: string[];         // elements and plays
+  builder: BuilderRow[]; age: Age; family: string;           // plays
+  stages: Partial<Record<Age, { play: string; notes: string }>>; status: PlanStatus | ''; // game plans
+  where: Place[]; whereNote: string; civOn: string[];         // elements, plays and game plans
   mapsOn: string[];                                           // features
   type: string; features: string[]; inPool: boolean; notes: string; // maps
   short: string; parent: string;                              // civs
@@ -27,7 +28,7 @@ export interface TagDraft {
   age: Age | null; timing: string; tells: string; notes: string;
   intent: Intent | ''; subject: string;                       // element tags only
 }
-export interface BulkDraft { civ: string; seg: ItemKind; place: PlaceDraft; pickedEl: string[]; pickedPlay: string[] }
+export interface BulkDraft { civ: string; seg: ItemKind; place: PlaceDraft; picked: Record<ItemKind, string[]> }
 export type RefKind = 'mine' | 'game' | 'guide';
 export interface RefDraft {
   kind: RefKind; id: string | null; url: string; title: string; notes: string;
@@ -37,26 +38,27 @@ export interface RefDraft {
 export type Side = 'player' | 'opponent';
 export interface MomentDraft {
   refKind: 'game' | 'guide'; gameId: string | null; linkId: string | null; pid: string | null; mid: string | null;
-  side: Side; civ: string; builder: BuilderRow[]; origStrategy: string | null; name: string; at: string; note: string;
+  side: Side; civ: string; mode: 'steps' | 'plan'; builder: BuilderRow[]; age: Age; plan: string; origPlay: string | null; name: string; at: string; note: string;
   outcome: Outcome | null; prep: Prep | null; did: string; showHow: boolean; shows: Shows;
 }
 
 interface SheetBase { sid: number; back?: Sheet | null; open?: string | null }
-export type DefSheet = SheetBase & { kind: 'def'; type: DefType; id: string | null; draft: DefDraft; picking: boolean };
+// stageFor: a new play made from a game plan's stage goes back into that stage.
+export type DefSheet = SheetBase & { kind: 'def'; type: DefType; id: string | null; draft: DefDraft; picking: boolean; stageFor?: Age | null };
 export type TagSheet = SheetBase & { kind: 'tag'; draft: TagDraft };
 export type BulkSheet = SheetBase & { kind: 'bulk'; draft: BulkDraft };
 export type WhySheet = SheetBase & { kind: 'why'; itemKind: ItemKind; id: string; civ: string };
 export type UpkeepSheet = SheetBase & { kind: 'upkeep' };
-export type MergeSheet = SheetBase & { kind: 'merge'; keep: string | null };
+export type MergeSheet = SheetBase & { kind: 'merge'; what: 'play' | 'plan'; keep: string | null };
 export type RefSheet = SheetBase & { kind: 'refdet'; draft: RefDraft };
 export type MomentSheet = SheetBase & { kind: 'moment'; draft: MomentDraft; picking: boolean };
 export type Sheet = DefSheet | TagSheet | BulkSheet | WhySheet | UpkeepSheet | MergeSheet | RefSheet | MomentSheet;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NewSheet = DistributiveOmit<Sheet, 'sid'>;
 
-export type LibrarySeg = 'elements' | 'landmarks' | 'strategies';
+export type LibrarySeg = 'elements' | 'plays' | 'gamePlans' | 'landmarks';
 export type MapsSeg = 'maps' | 'features' | 'mapTypes';
-export type CheckSeg = 'plays' | 'elements' | 'mine';
+export type CheckSeg = 'plans' | 'plays' | 'elements' | 'mine';
 export type RefsSeg = 'all' | 'mine' | 'games' | 'guides';
 
 export const S = {

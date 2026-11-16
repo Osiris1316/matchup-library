@@ -1,6 +1,6 @@
-// Tag one element or play for a civ, or tick many at once.
+// Tag one element, play or game plan for a civ, or tick many at once.
 import type { ReactNode } from 'react';
-import { AGE_NAME, INTENTS, INTENT_NAME, agesText, byName, isActive, placeKey, plural, tagField, tagTargetId, type Intent } from '@matchup-library/core';
+import { AGES, AGE_NAME, INTENTS, INTENT_NAME, ITEM_WORD, STAGE_NAME, agesText, byName, isActive, placeKey, plural, stagesOf, tagField, tagTargetId, type Intent, type ItemKind } from '@matchup-library/core';
 import { L, S, bind, closeSheet, emit, toggleIn, type BulkSheet as BulkSheetT, type TagSheet as TagSheetT } from '../store';
 import { elementGroups, retireTagFromSheet, saveBulk, saveTag } from '../actions';
 import { LandmarkOptions, PlacePicker } from '../components/pickers';
@@ -10,16 +10,18 @@ import { SplitPill, StepPills } from '../components/Pill';
 export function TagSheet({ sh }: { sh: TagSheetT }) {
   const d = sh.draft;
   const isEl = d.field === 'el';
-  const def = isEl ? L.el(d.target) : L.strat(d.target);
+  const def = L.itemDef(d.field, d.target);
   const ages = isEl ? L.elAges(d.target) : [];
-  const steps = def && 'steps' in def ? def.steps : null;
+  const play = d.field === 'play' ? L.play(d.target) : null;
+  const plan = d.field === 'plan' ? L.plan(d.target) : null;
+  const steps = play ? play.steps : null;
   return (
     <>
       <SheetBack />
       <div className="sheet-head">
         <div>
           <h2 id="sheet-title">{isEl && def ? <SplitPill el={d.target} use={{ intent: d.intent || null, subject: d.subject || null }} size="lg" /> : def ? def.name : ''}</h2>
-          <span className="sublabel">{d.tagId ? 'Tag' : 'New tag'} for {L.civName(d.civ)}{steps ? '. ' + L.sequence(steps) : ''}</span>
+          <span className="sublabel">{d.tagId ? 'Tag' : 'New tag'} for {L.civName(d.civ)}{play ? '. ' + STAGE_NAME[play.age] + ': ' + L.sequence(play.steps) : plan ? '. ' + L.planSequence(plan) : ''}</span>
           {steps && <StepPills steps={steps} />}
         </div>
         <CloseBtn />
@@ -66,30 +68,37 @@ export function TagSheet({ sh }: { sh: TagSheetT }) {
 
 export function BulkSheet({ sh }: { sh: BulkSheetT }) {
   const d = sh.draft;
-  const isEl = d.seg === 'el';
+  const seg = d.seg;
   const pk = placeKey(d.place);
-  const here = new Set(L.activeTags().filter((t) => t.civ === d.civ && placeKey(t.place) === pk && !t.age && tagField(t) === d.seg).map(tagTargetId));
-  const picked = isEl ? d.pickedEl : d.pickedPlay;
+  const here = new Set(L.activeTags().filter((t) => t.civ === d.civ && placeKey(t.place) === pk && !t.age && tagField(t) === seg).map(tagTargetId));
+  const picked = d.picked[seg];
   const box = (id: string, name: ReactNode, sub: string) => {
     const already = here.has(id);
     return (
       <label key={id} className="check">
         <input type="checkbox" id={'bk-' + id} value={id} checked={already || picked.includes(id)} disabled={already} onChange={(e) => {
-          if (isEl) d.pickedEl = toggleIn(d.pickedEl, id, e.target.checked); else d.pickedPlay = toggleIn(d.pickedPlay, id, e.target.checked);
+          d.picked[seg] = toggleIn(d.picked[seg], id, e.target.checked);
           emit();
         }} />
         <span className="txt"><span className="fw5">{name}</span><span className="sublabel">{already ? 'Already tagged here' : sub}</span></span>
       </label>
     );
   };
-  const list = isEl
+  const list = seg === 'el'
     ? elementGroups().map((g) => (
         <div key={g.name}>
           <div className="group"><h3 className="label">{g.name}</h3></div>
           {g.items.map((e) => box(e.id, <SplitPill el={e.id} />, agesText(L.elAges(e.id))))}
         </div>
       ))
-    : S.data.defs.strategies.filter(isActive).sort(byName).map((s) => box(s.id, s.name, L.sequence(s.steps)));
+    : seg === 'play'
+      ? AGES.filter((a) => L.activePlays(a).length).map((a) => (
+          <div key={a}>
+            <div className="group"><h3 className="label">{STAGE_NAME[a]}</h3></div>
+            {L.activePlays(a).sort(byName).map((p) => box(p.id, p.name, (p.family ? p.family + '. ' : '') + L.sequence(p.steps)))}
+          </div>
+        ))
+      : S.data.defs.gamePlans.filter(isActive).sort(byName).map((g) => box(g.id, g.name, stagesOf(g).length ? L.planSequence(g) : 'No plays yet'));
   const n = picked.filter((id) => !here.has(id)).length;
   return (
     <>
@@ -97,12 +106,12 @@ export function BulkSheet({ sh }: { sh: BulkSheetT }) {
         <div><h2 id="sheet-title">Tag {L.civName(d.civ)}</h2><span className="sublabel">Tick everything they do, then add timing and tells to each one later.</span></div>
         <CloseBtn />
       </div>
-      <Seg label="What to tag" act="bk-seg" options={[['el', 'Elements'], ['play', 'Plays']]} current={d.seg} onPick={(v) => { d.seg = v; emit(); }} />
+      <Seg label="What to tag" act="bk-seg" options={[['el', 'Elements'], ['play', 'Plays'], ['plan', 'Game plans']] as [ItemKind, string][]} current={d.seg} onPick={(v) => { d.seg = v; emit(); }} />
       <PlacePicker owner={d} />
       <div>{list.length ? list : <p className="hint">Nothing to tag yet. Add some in Library.</p>}</div>
       <div className="btn-row sheet-foot">
         <button type="button" className="btn" data-act="sheet-close" onClick={closeSheet}>Cancel</button>
-        <button type="button" className="btn btn-primary" data-act="bk-save" disabled={!n} onClick={() => saveBulk()}>{n ? 'Tag ' + plural(n, isEl ? 'element' : 'play') : 'Tick some first'}</button>
+        <button type="button" className="btn btn-primary" data-act="bk-save" disabled={!n} onClick={() => saveBulk()}>{n ? 'Tag ' + plural(n, ITEM_WORD[seg]) : 'Tick some first'}</button>
       </div>
     </>
   );

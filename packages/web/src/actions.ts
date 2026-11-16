@@ -1,10 +1,10 @@
 // What the buttons do: open sheets with drafts, and turn saved drafts into
 // record writes. Each save is one commit, so it can be undone in one step.
 import {
-  AGES, EL_TYPES, EL_TYPE_GROUP, INTENT_NAME, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, lookOf, newId, newTag, normalizeUrl, openAtFrom,
-  parsePlace, parseTime, placeKey, plural, safeUrl, slug, stable, stepsToBuilder, tagField, tagKey, tagKeyOf, tagTargetId, timed,
-  fmtTime, type Age, type BuilderRow, type DefType, type DocWrite, type Element, type Game, type GamePlay, type Intent, type ItemKind,
-  type Link, type Mark, type Place, type Strategy, type Tag
+  AGES, EL_TYPES, EL_TYPE_GROUP, INTENT_NAME, ITEM_WORD, STAGE_NAME, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, lookOf, newId, newTag,
+  normalizeUrl, openAtFrom, parsePlace, parseTime, placeKey, plural, safeUrl, slug, stable, stagesOf, stepsToBuilder, tagField, tagKey, tagKeyOf, tagTargetId, targetOf, timed,
+  fmtTime, type Age, type BuilderRow, type DefType, type DocWrite, type Element, type Game, type GamePlan, type GamePlay, type Intent, type ItemKind,
+  type Link, type Mark, type Place, type Play, type Tag
 } from '@matchup-library/core';
 import { commit } from './api/client';
 import {
@@ -12,7 +12,8 @@ import {
   type DefDraft, type DefSheet, type MomentDraft, type PlaceDraft, type RefDraft, type RefKind, type Sheet
 } from './store';
 
-export const DEF_WORD: Record<DefType, string> = { elements: 'element', strategies: 'play', kinds: 'kind', features: 'map feature', maps: 'map', mapTypes: 'map type', civs: 'civ' };
+export const DEF_WORD: Record<DefType, string> = { elements: 'element', plays: 'play', gamePlans: 'game plan', kinds: 'kind', features: 'map feature', maps: 'map', mapTypes: 'map type', civs: 'civ' };
+const FIELD_OF: Partial<Record<DefType, ItemKind>> = { elements: 'el', plays: 'play', gamePlans: 'plan' };
 type Item = { id: string; name: string; active: boolean };
 const listOf = (t: DefType): Item[] => S.data.defs[t] as Item[];
 const findDef = (t: DefType, id: string | null | undefined): Item | null => listOf(t).find((x) => x.id === id) || null;
@@ -66,7 +67,7 @@ export async function saveTag(): Promise<void> {
   const myKey = tagKeyOf(d.civ, d.field, d.target, age, place, look.intent || null);
   const same = L.allTags().find((t) => t.id !== d.tagId && tagKey(t) === myKey);
   const fields = { timing: d.timing.trim(), tells: d.tells.trim(), notes: d.notes.trim() };
-  const name = d.field === 'el' ? L.elName(d.target) : L.playTitle(d.target);
+  const name = L.itemName(d.field, d.target);
   if (same && same.active !== false) { showToast('That tag already exists, so it is open now.', true); openTagSheet({ tagId: same.id }, sh.back); return; }
   const writes: DocWrite[] = [];
   if (same) {
@@ -103,17 +104,16 @@ export async function restoreTag(id: string): Promise<void> {
 }
 
 export function openBulk(civ: string): void {
-  openSheet({ kind: 'bulk', draft: { civ, seg: 'el', place: { kind: 'any', id: null }, pickedEl: [], pickedPlay: [] } });
+  openSheet({ kind: 'bulk', draft: { civ, seg: 'el', place: { kind: 'any', id: null }, picked: { el: [], play: [], plan: [] } } });
 }
 
 export async function saveBulk(): Promise<void> {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'bulk') return;
   const d = sh.draft;
-  const isEl = d.seg === 'el';
   const place = toPlace(d.place);
   if (!place) { showToast('Pick where it applies first.', true); return; }
-  const picked = isEl ? d.pickedEl : d.pickedPlay;
+  const picked = d.picked[d.seg];
   const writes: DocWrite[] = [];
   picked.forEach((id) => {
     const twin = L.allTags().find((t) => tagKey(t) === tagKeyOf(d.civ, d.seg, id, null, place));
@@ -123,7 +123,7 @@ export async function saveBulk(): Promise<void> {
   });
   if (!writes.length) { showToast('Everything ticked is already tagged here.', true); return; }
   S.sheet = null;
-  await commit('Tagged ' + L.civName(d.civ) + ' with ' + plural(writes.length, isEl ? 'element' : 'play') + ' ' + L.placePhrase(place), writes);
+  await commit('Tagged ' + L.civName(d.civ) + ' with ' + plural(writes.length, ITEM_WORD[d.seg]) + ' ' + L.placePhrase(place), writes);
 }
 
 // A variant starts from its base civ's tags. A tag the variant already has,
@@ -155,7 +155,8 @@ export async function copyFromParent(cid: string): Promise<void> {
 const civOnFor = (field: ItemKind, id: string): string[] => [...new Set(L.activeTags().filter((t) => t[field] === id && placeKey(t.place) === 'any:').map((t) => t.civ))];
 function blankDraft(): DefDraft {
   return { name: '', description: '', kind: '', ages: AGES.slice(), tells: '', subject: '', intent: '', universal: false, cannot: [],
-    builder: [], where: [], whereNote: '', civOn: [], mapsOn: [], type: '', features: [], inPool: true, notes: '', short: '', parent: '' };
+    builder: [], age: 'dark', family: '', stages: {}, status: '',
+    where: [], whereNote: '', civOn: [], mapsOn: [], type: '', features: [], inPool: true, notes: '', short: '', parent: '' };
 }
 function elementDraft(id: string | null): DefDraft {
   const d = blankDraft();
@@ -214,13 +215,21 @@ export async function setSubjectIntent(id: string, intent: Intent | null): Promi
   await commit('Set ' + x.name + ' to ' + (intent ? INTENT_NAME[intent].toLowerCase() : 'no intent'), [{ path: 'subjects/' + id, data: { ...clone(x), defaultIntent: intent } }]);
 }
 
-export function openDef(type: DefType, id: string | null): void {
+// opts.age: the age for a new play. opts.stageFor: the play is being made
+// from the game plan sheet in opts.back, for that age's stage.
+export function openDef(type: DefType, id: string | null, opts: { age?: Age; back?: Sheet | null; stageFor?: Age } = {}): void {
   if (type === 'elements') { openElement(id); return; }
   const d = blankDraft();
   const D = S.data.defs;
-  if (type === 'strategies') {
-    const it = D.strategies.find((x) => x.id === id);
-    if (it) Object.assign(d, { name: it.name, description: it.description || '', builder: stepsToBuilder(it.steps), where: clone(it.where || []), whereNote: it.whereNote || '', civOn: civOnFor('play', it.id) });
+  if (type === 'plays') {
+    const it = D.plays.find((x) => x.id === id);
+    if (it) Object.assign(d, { name: it.name, age: it.age, family: it.family || '', description: it.description || '', tells: it.tells || '', notes: it.notes || '',
+      builder: stepsToBuilder(it.steps), where: clone(it.where || []), whereNote: it.whereNote || '', civOn: civOnFor('play', it.id) });
+    else d.age = opts.age || 'dark';
+  } else if (type === 'gamePlans') {
+    const it = D.gamePlans.find((x) => x.id === id);
+    if (it) Object.assign(d, { name: it.name, description: it.description || '', notes: it.notes || '', status: it.status || '', stages: clone(it.stages || {}),
+      where: clone(it.where || []), whereNote: it.whereNote || '', civOn: civOnFor('plan', it.id) });
   } else if (type === 'features') {
     const it = D.features.find((x) => x.id === id);
     if (it) Object.assign(d, { name: it.name, description: it.description || '', mapsOn: D.maps.filter((m) => (m.features || []).includes(it.id)).map((m) => m.id) });
@@ -236,13 +245,13 @@ export function openDef(type: DefType, id: string | null): void {
     if (it) Object.assign(d, { name: it.name, description: it.description || '' });
   }
   const it = findDef(type, id);
-  openSheet({ kind: 'def', type, id: it ? it.id : null, draft: d, picking: false });
+  openSheet({ kind: 'def', type, id: it ? it.id : null, draft: d, picking: false, back: opts.back || null, stageFor: opts.stageFor || null });
 }
 
 function civTagWrites(field: ItemKind, id: string, civOn: string[]): { writes: DocWrite[]; on: number; off: number } {
   const writes: DocWrite[] = [];
   let on = 0, off = 0;
-  const anyTags = L.allTags().filter((t) => t[field] === id && placeKey(t.place) === 'any:');
+  const anyTags = L.allTags().filter((t) => tagField(t) === field && tagTargetId(t) === id && placeKey(t.place) === 'any:');
   L.activeCivs().forEach((c) => {
     const mine = anyTags.filter((t) => t.civ === c.id);
     const live = mine.filter((t) => t.active !== false);
@@ -263,7 +272,13 @@ function civTagWrites(field: ItemKind, id: string, civOn: string[]): { writes: D
 export async function saveDef(): Promise<void> {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'def') return;
-  await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = null; });
+  const back = sh.back && sh.back.kind === 'def' && sh.back.type === 'gamePlans' ? sh.back : null;
+  const stageAge = sh.stageFor || null;
+  const id = await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = back; });
+  if (id && back && stageAge) {
+    back.draft.stages[stageAge] = { play: id, notes: (back.draft.stages[stageAge] || { notes: '' }).notes || '' };
+    emit();
+  }
 }
 
 // Saves a definition draft as one commit. Returns the saved id, or null if
@@ -273,12 +288,13 @@ async function saveDefDraft(t: DefType, origId: string | null, d: DefDraft, clos
   const name = (d.name || '').trim();
   if (!name) { showToast('Give it a name first.', true); return null; }
   const items = clone(listOf(t)) as (Item & Record<string, unknown>)[];
-  const dup = items.find((x) => x.id !== origId && x.name.toLowerCase() === name.toLowerCase());
-  if (dup) { showToast(isActive(dup) ? 'There is already a ' + word + ' with that name.' : 'A retired ' + word + ' has that name. Restore it instead.', true); return null; }
+  // Plays in different ages can share a name: Spears in Dark and in Feudal are different plays.
+  const dup = items.find((x) => x.id !== origId && x.name.toLowerCase() === name.toLowerCase() && (t !== 'plays' || x.age === d.age));
+  if (dup) { showToast(isActive(dup) ? 'There is already a ' + word + ' with that name' + (t === 'plays' ? ' in this age.' : '.') : 'A retired ' + word + ' has that name. Restore it instead.', true); return null; }
   let id = origId;
   if (!id) {
     const sep = t === 'maps' ? '-' : '_';
-    const base = t === 'maps' ? slug(name).replace(/_/g, '-') : slug(name);
+    const base = t === 'maps' ? slug(name).replace(/_/g, '-') : t === 'plays' ? d.age + '_' + slug(name) : slug(name);
     let next = base, n = 2;
     while (items.some((x) => x.id === next)) { next = base + sep + n; n += 1; }
     id = next;
@@ -288,25 +304,35 @@ async function saveDefDraft(t: DefType, origId: string | null, d: DefDraft, clos
   item.name = name;
   const extra: DocWrite[] = [];
   let tagNote = '';
-  if (t === 'elements' || t === 'strategies') {
+  const field = FIELD_OF[t];
+  if (field) {
     if (t === 'elements') {
       Object.assign(item, { kind: d.kind, ages: AGES.filter((a) => d.ages.includes(a)), description: d.description.trim(), tells: d.tells.trim(),
         subject: d.subject || null, intent: d.intent || null, universal: !!d.universal, cannot: d.universal ? d.cannot.slice().sort() : [] });
-    } else {
-      const steps = builderToSteps(d.builder);
+    } else if (t === 'plays') {
+      const steps = builderToSteps(d.builder, d.age);
       if (!steps.length) { showToast('Add at least one element to the play.', true); return null; }
-      const sig = L.signature(steps);
-      const twin = S.data.defs.strategies.find((s) => s.id !== origId && isActive(s) && L.signature(s.steps) === sig);
-      if (twin) { showToast('Same steps as ' + twin.name + '. Edit that play instead, or change the steps.', true); return null; }
-      const p = prev as Strategy | null;
+      const off = steps.find((st) => !L.elAges(st.el).includes(d.age));
+      if (off) { showToast(L.elName(off.el) + " can't happen in " + STAGE_NAME[d.age] + '. Change the age, or take it out.', true); return null; }
+      const twin = L.matchPlay(d.builder, d.age, origId);
+      if (twin && twin.id !== origId) { showToast('Same steps as ' + twin.name + ' in this age. Edit that play instead, or change the steps.', true); return null; }
+      const p = prev as Play | null;
       const oldNotes: Record<string, string> = {};
       (p ? p.steps : []).forEach((s) => { oldNotes[s.el + '@' + s.step] = s.notes; });
-      Object.assign(item, { description: d.description.trim(), steps: steps.map((s) => ({ ...s, notes: oldNotes[s.el + '@' + s.step] || '' })), notes: p ? p.notes || '' : '', mergedInto: p ? p.mergedInto || null : null });
+      Object.assign(item, { age: d.age, family: d.family.trim() || L.suggestFamily(steps, d.age), description: d.description.trim(), tells: d.tells.trim(), notes: d.notes.trim(),
+        steps: steps.map((s) => ({ ...s, notes: oldNotes[s.el + '@' + s.step] || '' })), mergedInto: p ? p.mergedInto || null : null });
+    } else {
+      const stages: GamePlan['stages'] = {};
+      AGES.forEach((a) => { const st = d.stages[a]; if (st && st.play) stages[a] = { play: st.play, notes: (st.notes || '').trim() }; });
+      const twin = L.activePlans().find((g) => g.id !== origId && stagesOf(g).length && L.planSignature(g) === L.planSignature({ stages } as GamePlan));
+      if (twin) { showToast('Same play in every age as ' + twin.name + '. Edit that game plan instead, or change a stage.', true); return null; }
+      const p = prev as GamePlan | null;
+      Object.assign(item, { description: d.description.trim(), notes: d.notes.trim(), status: d.status || null, stages, mergedInto: p ? p.mergedInto || null : null });
     }
     item.where = d.where;
     item.whereNote = d.where.length ? d.whereNote.trim() : '';
     // A universal element is implied for every civ, so its civ list isn't edited here.
-    const r = t === 'elements' && d.universal ? { writes: [], on: 0, off: 0 } : civTagWrites(t === 'elements' ? 'el' : 'play', id, d.civOn);
+    const r = t === 'elements' && d.universal ? { writes: [], on: 0, off: 0 } : civTagWrites(field, id, d.civOn);
     extra.push(...r.writes);
     if (r.on || r.off) tagNote = ' ' + [r.on ? 'Tagged ' + plural(r.on, 'civ') : '', r.off ? (r.on ? 'untagged ' : 'Untagged ') + plural(r.off, 'civ') : ''].filter(Boolean).join(', ') + '.';
   } else if (t === 'features') {
@@ -368,31 +394,43 @@ export function cycleAge(row: BuilderRow): void {
 }
 
 // ---------------------------------------------------------------------------
-// Upkeep: merge duplicate plays
+// Upkeep: merge duplicate plays or game plans
 // ---------------------------------------------------------------------------
-export async function doMerge(keepId: string): Promise<void> {
-  const group = L.health().dupes.find((g) => g.some((s) => s.id === keepId));
+export async function doMerge(what: 'play' | 'plan', keepId: string): Promise<void> {
+  const h = L.health();
+  const group = (what === 'play' ? h.dupes : h.planDupes).find((g) => (g as { id: string }[]).some((s) => s.id === keepId)) as { id: string }[] | undefined;
   if (!group) return;
   const gone = group.filter((s) => s.id !== keepId).map((s) => s.id);
   const isGone = (id: string | null | undefined) => !!id && gone.includes(id);
-  const writes: DocWrite[] = [{ path: 'defs/strategies', data: { items: clone(S.data.defs.strategies).map((s) => (gone.includes(s.id) ? { ...s, active: false, mergedInto: keepId } : s)) } }];
+  const key = what === 'play' ? 'playId' : 'planId';
+  const writes: DocWrite[] = [what === 'play'
+    ? { path: 'defs/plays', data: { items: clone(S.data.defs.plays).map((s) => (gone.includes(s.id) ? { ...s, active: false, mergedInto: keepId } : s)) } }
+    : { path: 'defs/gamePlans', data: { items: clone(S.data.defs.gamePlans).map((s) => (gone.includes(s.id) ? { ...s, active: false, mergedInto: keepId } : s)) } }];
   let moved = 0;
+  // Game plans that use a merged play now use the one kept.
+  if (what === 'play') {
+    const plans = clone(S.data.defs.gamePlans);
+    let changed = false;
+    plans.forEach((g) => AGES.forEach((a) => { const st = g.stages[a]; if (st && isGone(st.play)) { st.play = keepId; changed = true; moved += 1; } }));
+    if (changed) writes.push({ path: 'defs/gamePlans', data: { items: plans } });
+  }
   Object.entries(S.data.games).forEach(([gid, g]) => {
-    if (!(g.plays || []).some((p) => isGone(p.strategyId))) return;
+    if (!(g.plays || []).some((p) => isGone(p[key]))) return;
     const next = clone(g);
-    next.plays.forEach((p) => { if (isGone(p.strategyId)) { p.strategyId = keepId; moved += 1; } });
+    next.plays.forEach((p) => { if (isGone(p[key])) { p[key] = keepId; moved += 1; } });
     writes.push({ path: 'games/' + gid, data: next });
   });
-  Object.entries(S.data.tags).forEach(([tid, t]) => { if (isGone(t.play)) { writes.push({ path: 'tags/' + tid, data: { ...clone(t), play: keepId } }); moved += 1; } });
-  Object.entries(S.data.answers).forEach(([aid, a]) => { if (isGone(a.strategyId)) writes.push({ path: 'answers/' + aid, data: { ...clone(a), strategyId: keepId } }); });
+  const tagKeyName = what === 'play' ? 'play' : 'plan';
+  Object.entries(S.data.tags).forEach(([tid, t]) => { if (isGone(t[tagKeyName])) { writes.push({ path: 'tags/' + tid, data: { ...clone(t), [tagKeyName]: keepId } }); moved += 1; } });
   Object.entries(S.data.links).forEach(([lid, l]) => {
-    if (!(l.marks || []).some((m) => isGone(m.strategyId))) return;
+    if (!(l.marks || []).some((m) => isGone(m[key]))) return;
     const next = clone(l);
-    next.marks.forEach((m) => { if (isGone(m.strategyId)) m.strategyId = keepId; });
+    next.marks.forEach((m) => { if (isGone(m[key])) m[key] = keepId; });
     writes.push({ path: 'links/' + lid, data: next });
   });
+  const name = (id: string) => L.itemName(what, id);
   S.sheet = null;
-  await commit('Merged ' + gone.map((x) => L.playTitle(x)).join(', ') + ' into ' + L.playTitle(keepId), writes, 'Merged. ' + plural(moved, 'game or tag', 'games and tags') + ' moved to ' + L.playTitle(keepId) + '.');
+  await commit('Merged ' + gone.map(name).join(', ') + ' into ' + name(keepId), writes, 'Merged. ' + plural(moved, 'reference') + ' moved to ' + name(keepId) + '.');
 }
 
 // ---------------------------------------------------------------------------
@@ -475,14 +513,18 @@ export async function deleteRef(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Moments: what happened in a game or guide, and when
 // ---------------------------------------------------------------------------
-function targetBuilder(x: { strategyId?: string | null; elementId?: string | null; age?: Age | null; intent?: Intent | null; subject?: string | null }): BuilderRow[] {
-  const s = x.strategyId ? L.strat(x.strategyId) : null;
-  if (s) return stepsToBuilder(s.steps);
-  if (x.elementId) return [{ el: x.elementId, age: x.age || null, join: false, ...lookOf(x) }];
-  return [];
+// What a moment shows, as a draft: a game plan, or steps in one age (one
+// element, or several for a play).
+function targetDraft(x: { planId?: string | null; playId?: string | null; elementId?: string | null; age?: Age | null; intent?: Intent | null; subject?: string | null }):
+  Pick<MomentDraft, 'mode' | 'builder' | 'age' | 'plan' | 'origPlay'> {
+  if (x.planId) return { mode: 'plan', builder: [], age: 'dark', plan: x.planId, origPlay: null };
+  const p = x.playId ? L.play(x.playId) : null;
+  if (p) return { mode: 'steps', builder: stepsToBuilder(p.steps), age: p.age, plan: '', origPlay: p.id };
+  if (x.elementId) return { mode: 'steps', builder: [{ el: x.elementId, age: x.age || null, join: false, ...lookOf(x) }], age: x.age || L.elAges(x.elementId)[0] || 'dark', plan: '', origPlay: null };
+  return { mode: 'steps', builder: [], age: 'dark', plan: '', origPlay: null };
 }
 function blankMoment(d: Pick<MomentDraft, 'refKind' | 'gameId' | 'linkId' | 'side' | 'civ' | 'shows'>): MomentDraft {
-  return { refKind: d.refKind, gameId: d.gameId, linkId: d.linkId, pid: null, mid: null, side: d.side, civ: d.civ, builder: [], origStrategy: null, name: '', at: '', note: '',
+  return { refKind: d.refKind, gameId: d.gameId, linkId: d.linkId, pid: null, mid: null, side: d.side, civ: d.civ, mode: 'steps', builder: [], age: 'dark', plan: '', origPlay: null, name: '', at: '', note: '',
     outcome: null, prep: null, did: '', showHow: false, shows: d.shows };
 }
 export function openMoment(key: string | null): void {
@@ -494,13 +536,13 @@ export function openMoment(key: string | null): void {
     d = blankMoment({ refKind: 'game', gameId: r.id, linkId: null, side: S.lastSide || 'opponent', civ: '', shows: 'threat' });
     if (p) {
       const mk = L.gameMark(r.id, p.pid);
-      Object.assign(d, { pid: p.pid, side: p.runBy || 'opponent', builder: targetBuilder(p), origStrategy: p.strategyId || null, at: mk && mk.m.at != null ? fmtTime(mk.m.at) : '', note: p.notes || '',
+      Object.assign(d, { pid: p.pid, side: p.runBy || 'opponent', ...targetDraft(p), at: mk && mk.m.at != null ? fmtTime(mk.m.at) : '', note: p.notes || '',
         outcome: p.outcome || null, prep: p.prep || null, did: p.did || '', showHow: !!(p.outcome || p.prep || p.did) });
     }
   } else {
     const m = key ? (r.l.marks || []).find((x) => x.mid === key) : null;
     d = blankMoment({ refKind: 'guide', gameId: null, linkId: r.id, side: 'opponent', civ: r.l.civ || '', shows: 'threat' });
-    if (m) Object.assign(d, { mid: m.mid, civ: m.civ || '', builder: targetBuilder(m), origStrategy: m.strategyId || null, at: m.at != null ? fmtTime(m.at) : '', note: m.note || '', shows: m.shows || 'threat' });
+    if (m) Object.assign(d, { mid: m.mid, civ: m.civ || '', ...targetDraft(m), at: m.at != null ? fmtTime(m.at) : '', note: m.note || '', shows: m.shows || 'threat' });
   }
   openSheet({ kind: 'moment', draft: d, picking: !key });
 }
@@ -509,23 +551,29 @@ export async function saveMoment(again: boolean): Promise<void> {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'moment') return;
   const d = sh.draft;
-  const steps = builderToSteps(d.builder);
+  const planMode = d.mode === 'plan';
+  const steps = planMode ? [] : builderToSteps(d.builder, d.age);
   const first = steps[0];
-  if (!first) { showToast('Add what happened first: one element, or several for a play.', true); return; }
+  if (planMode && !d.plan) { showToast('Pick the game plan first.', true); return; }
+  if (!planMode && !first) { showToast('Add what happened first: one element, or several for a play.', true); return; }
+  const off = steps.find((st) => !L.elAges(st.el).includes(d.age));
+  if (off) { showToast(L.elName(off.el) + " can't happen in " + STAGE_NAME[d.age] + '. Change the age, or take it out.', true); return; }
   const atText = (d.at || '').trim();
   const at = atText ? parseTime(atText) : null;
   if (atText && at == null) { showToast('Write the time like 2:30, or leave it empty.', true); return; }
-  const items = clone(S.data.defs.strategies);
-  let tgt: { strategyId: string | null; elementId: string | null; age: Age | null; created?: boolean; name?: string; intent?: Intent | null; subject?: string | null };
-  if (steps.length === 1) tgt = { elementId: first.el, age: first.age || null, strategyId: null, ...lookOf(first) };
+  const items = clone(S.data.defs.plays);
+  type Tgt = { planId: string | null; playId: string | null; elementId: string | null; age: Age | null; created?: boolean; name?: string; intent?: Intent | null; subject?: string | null };
+  let tgt: Tgt;
+  if (planMode) tgt = { ...targetOf('plan', d.plan), age: null };
+  else if (steps.length === 1 && first) tgt = { ...targetOf('el', first.el), age: d.age, ...lookOf(first) };
   else {
     const nm = (d.name || '').trim();
-    if (!L.matchPlay(d.builder, d.origStrategy) && nm && items.some((x) => x.name.toLowerCase() === nm.toLowerCase())) { showToast('A different play already has that name. Pick another.', true); return; }
-    const r = L.resolveStrategy(d.builder, nm, items, d.origStrategy);
-    tgt = { strategyId: r.id, elementId: null, age: null, created: !!r.created, name: r.name };
+    if (!L.matchPlay(d.builder, d.age, d.origPlay) && nm && items.some((x) => x.age === d.age && x.name.toLowerCase() === nm.toLowerCase())) { showToast('A different play in this age already has that name. Pick another.', true); return; }
+    const r = L.resolvePlay(d.builder, d.age, nm, items, d.origPlay);
+    tgt = { ...targetOf('play', r.id), age: null, created: !!r.created, name: r.name };
   }
   const writes: DocWrite[] = [];
-  if (tgt.created) writes.push({ path: 'defs/strategies', data: { items } });
+  if (tgt.created) writes.push({ path: 'defs/plays', data: { items } });
   let title: string;
   if (d.refKind === 'game' && d.gameId) {
     const gameId = d.gameId;
@@ -537,17 +585,17 @@ export async function saveMoment(again: boolean): Promise<void> {
     const old: Partial<GamePlay> = i >= 0 ? { ...(g.plays[i] as GamePlay) } : {};
     delete old.intent;
     delete old.subject;
-    const play: GamePlay = { ...old, ...lookOf(tgt), pid, runBy: d.side, strategyId: tgt.strategyId, elementId: tgt.elementId, age: tgt.age, outcome: d.outcome || null,
+    const play: GamePlay = { ...old, ...lookOf(tgt), pid, runBy: d.side, planId: tgt.planId, playId: tgt.playId, elementId: tgt.elementId, age: tgt.age, outcome: d.outcome || null,
       prep: g.mine && d.side === 'opponent' ? d.prep || null : null, answerId: old.answerId || null, did: (d.did || '').trim(), notes: (d.note || '').trim() };
     if (i >= 0) g.plays[i] = play; else g.plays.push(play);
     writes.push({ path: 'games/' + gameId, data: g });
     const link = L.mainLink(gameId);
     if (link && timed(link)) {
       const lk = clone(S.data.links[link.id] as Link);
-      const had = (lk.marks || []).some((m) => m.playId === pid);
+      const had = (lk.marks || []).some((m) => m.gamePlayId === pid);
       if (had || at != null) {
-        lk.marks = (lk.marks || []).filter((m) => m.playId !== pid);
-        if (at != null) lk.marks.push({ mid: newId(), at, playId: pid, civ: null, elementId: null, strategyId: null, age: null, shows: 'both', note: '' });
+        lk.marks = (lk.marks || []).filter((m) => m.gamePlayId !== pid);
+        if (at != null) lk.marks.push({ mid: newId(), at, gamePlayId: pid, civ: null, elementId: null, playId: null, planId: null, age: null, shows: 'both', note: '' });
         writes.push({ path: 'links/' + link.id, data: lk });
       }
     }
@@ -558,12 +606,12 @@ export async function saveMoment(again: boolean): Promise<void> {
     title = guideTitle(lk);
     lk.marks = lk.marks || [];
     const mid = d.mid || newId();
-    const mark: Mark = { mid, at, playId: null, civ: d.civ || null, elementId: tgt.elementId, strategyId: tgt.strategyId, age: tgt.age, shows: d.shows || 'threat', note: (d.note || '').trim(), ...lookOf(tgt) };
+    const mark: Mark = { mid, at, gamePlayId: null, civ: d.civ || null, elementId: tgt.elementId, playId: tgt.playId, planId: tgt.planId, age: tgt.age, shows: d.shows || 'threat', note: (d.note || '').trim(), ...lookOf(tgt) };
     const i = lk.marks.findIndex((m) => m.mid === mid);
     if (i >= 0) lk.marks[i] = mark; else lk.marks.push(mark);
     writes.push({ path: 'links/' + linkId, data: lk });
   } else return;
-  const what = tgt.strategyId ? tgt.name || L.playTitle(tgt.strategyId) : L.elName(tgt.elementId);
+  const what = tgt.name || L.targetName(tgt);
   const editing = !!(d.pid || d.mid);
   S.sheet = again ? { kind: 'moment', draft: blankMoment(d), picking: true, sid: nextSid() } : null;
   await commit((editing ? 'Edited a moment in ' : 'Added ' + what + ' to ') + title, writes, (editing ? 'Saved the moment.' : 'Added ' + what + '.') + (tgt.created ? ' New play added to Library.' : ''));
@@ -580,7 +628,7 @@ export async function deleteMoment(): Promise<void> {
     title = L.refTitleGame(g);
     g.plays = (g.plays || []).filter((p) => p.pid !== d.pid);
     writes.push({ path: 'games/' + d.gameId, data: g });
-    L.gameLinks(d.gameId).forEach((l) => { if ((l.marks || []).some((m) => m.playId === d.pid)) writes.push({ path: 'links/' + l.id, data: { ...clone(S.data.links[l.id] as Link), marks: l.marks.filter((m) => m.playId !== d.pid) } }); });
+    L.gameLinks(d.gameId).forEach((l) => { if ((l.marks || []).some((m) => m.gamePlayId === d.pid)) writes.push({ path: 'links/' + l.id, data: { ...clone(S.data.links[l.id] as Link), marks: l.marks.filter((m) => m.gamePlayId !== d.pid) } }); });
   } else if (d.linkId) {
     const lk = clone(S.data.links[d.linkId] as Link);
     title = guideTitle(lk);

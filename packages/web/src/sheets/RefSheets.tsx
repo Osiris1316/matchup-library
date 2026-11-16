@@ -1,9 +1,10 @@
 // A reference's details, and one moment in it.
-import { guideTitle, linkHint, timed, type Outcome, type Prep, type Shows } from '@matchup-library/core';
+import { byName, guideTitle, isActive, linkHint, timed, type Outcome, type Prep, type Shows } from '@matchup-library/core';
 import { L, S, bind, closeSheet, emit, type MomentSheet as MomentSheetT, type RefKind, type RefSheet as RefSheetT, type Side } from '../store';
 import { deleteMoment, deleteRef, saveMoment, saveRefDetails } from '../actions';
 import { Flag } from '../components/Flag';
 import { Builder } from '../components/pickers';
+import { PlanStages } from '../components/Pill';
 import { CivSelect, CloseBtn, Field, MapGroups, Seg } from '../components/bits';
 import { GameTitle, OUTCOME } from '../views/RefsView';
 
@@ -115,7 +116,23 @@ export function MomentSheet({ sh }: { sh: MomentSheetT }) {
         <CloseBtn />
       </div>
       {who}
-      <Builder sh={sh} mode="match" />
+      <div className="field">
+        <span className="label">What happened</span>
+        <Seg label="What happened" act="mo-mode" options={[['steps', 'Elements or a play'], ['plan', 'A whole game plan']] as ['steps' | 'plan', string][]} current={d.mode}
+          onPick={(v) => { d.mode = v; emit(); }} />
+      </div>
+      {d.mode === 'plan'
+        ? <div className="field">
+            <label className="label" htmlFor="mo-plan">Game plan</label>
+            <select id="mo-plan" className="select" value={d.plan} onChange={(e) => { d.plan = e.target.value; emit(); }}>
+              <option value="">Pick one</option>
+              {d.plan && !isActive(L.plan(d.plan)) && <option value={d.plan}>{L.planTitle(d.plan)} (retired)</option>}
+              {L.activePlans().slice().sort(byName).map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {L.plan(d.plan) && <PlanStages g={L.plan(d.plan) as NonNullable<ReturnType<typeof L.plan>>} />}
+            <span className="hint">For a game that went the whole way to plan. If only one age went that way, log that age's play instead.</span>
+          </div>
+        : <Builder sh={sh} mode="match" />}
       {timed(l) && (
         <div className="field"><label className="label" htmlFor="mo-at">Starts at</label><input id="mo-at" className="input" type="text" inputMode="numeric" autoComplete="off" placeholder="e.g. 2:30" {...bind(d, 'at')} /></div>
       )}

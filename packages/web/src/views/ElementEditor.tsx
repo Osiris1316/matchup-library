@@ -1,11 +1,11 @@
 // The Library's element editor and the "where it is used" pane. On a wide
 // screen they sit beside the element list; on a phone they replace it.
 import {
-  AGES, AGE_NAME, EL_TYPES, EL_TYPE_NAME, INTENTS, INTENT_NAME, byName, isActive, plural, type DefType, type ElType, type Intent,
+  AGES, AGE_NAME, EL_TYPES, EL_TYPE_NAME, INTENTS, INTENT_NAME, STAGE_NAME, byName, isActive, plural, type DefType, type ElType, type Intent,
   type Place, type SubjectKind
 } from '@matchup-library/core';
 import { L, S, bind, emit, showToast, toggleIn, type DefDraft } from '../store';
-import { closeElement, revertElement, saveElement, toggleDefActive, elementDirty } from '../actions';
+import { closeElement, openDef, revertElement, saveElement, toggleDefActive, elementDirty } from '../actions';
 import { Flag } from '../components/Flag';
 import { MultiSelect, type MsOption } from '../components/pickers';
 import { Field } from '../components/bits';
@@ -185,7 +185,7 @@ export function UsesPane() {
   const id = u.sel && u.sel !== 'new' ? u.sel : null;
   const e = id ? L.el(id) : null;
   if (!id || !e) return <p className="hint">Where an element is used shows here once it's saved.</p>;
-  const plays = S.data.defs.strategies.filter((s) => isActive(s) && s.steps.some((st) => st.el === id)).sort(byName);
+  const plays = S.data.defs.plays.filter((s) => isActive(s) && s.steps.some((st) => st.el === id)).sort((a, b) => AGES.indexOf(a.age) - AGES.indexOf(b.age) || byName(a, b));
   const civs = L.activeCivs().filter((c) => L.elementEvidence(c.id, id, ANY, null).some((x) => x.kind !== 'universal'));
   const cannot = (e.cannot || []).map((c) => L.civShort(c) || c);
   return (
@@ -195,11 +195,11 @@ export function UsesPane() {
         {plays.length
           ? <div className="list">
               {plays.map((s) => (
-                <div key={s.id} className="item">
-                  <span className="t">{s.name}</span>
+                <button key={s.id} type="button" className="item" data-act="df-open" data-type="plays" data-id={s.id} onClick={() => openDef('plays', s.id)}>
+                  <span className="t">{s.name} <span className="sublabel">{STAGE_NAME[s.age]}</span></span>
                   <StepPills steps={s.steps} mini />
                   <span className="s">{L.civCount('play', s.id) ? plural(L.civCount('play', s.id), 'civ') + ' tagged' : 'No civs yet'}</span>
-                </div>
+                </button>
               ))}
             </div>
           : <p className="hint">No plays use it yet.</p>}

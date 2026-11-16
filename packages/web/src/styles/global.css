@@ -329,3 +329,15 @@ button:disabled { cursor: default; opacity: 0.55; }
 .step-sub { margin: -2px 0 2px 24px; }
 .step-sub .select { min-height: 36px; font-size: 12px; }
 .picker .item .spill { max-width: 70%; }
+
+/* Phase 2: plays by age, game plans and their stages */
+.btn-sm { min-height: 36px; padding: 0 10px; font-size: 12px; }
+.agegroup { display: flex; flex-direction: column; gap: 8px; padding-top: 4px; }
+.agegroup + .agegroup { border-top: 1px solid var(--line-soft); padding-top: 12px; }
+.agegroup .block-head { align-items: center; }
+.stages { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+.stage-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.stage-line > .sublabel { flex: 0 0 auto; min-width: 84px; }
+.field.stage { padding: 10px 0; border-top: 1px solid var(--line-soft); }
+.stage-steps { display: block; padding: 2px 0; }
+.pill.warn { color: var(--warn); background: transparent; border-color: var(--warn); }

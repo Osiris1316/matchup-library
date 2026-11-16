@@ -20,8 +20,10 @@ if (!ex.defs || !Array.isArray(ex.defs.civs)) {
 const defs = ex.defs;
 
 // Parents before children, so every reference points at a row that exists.
+// Within a list, merged items go last, after the item they were merged into.
+const mergedLast = <T,>(items: T[]): T[] => [...items.filter((x) => !(x as { mergedInto?: string | null }).mergedInto), ...items.filter((x) => (x as { mergedInto?: string | null }).mergedInto)];
 const writes: DocWrite[] = [];
-DEF_TYPES.forEach((t) => writes.push({ path: 'defs/' + t, data: { items: defs[t] || [] } }));
+DEF_TYPES.forEach((t) => writes.push({ path: 'defs/' + t, data: { items: mergedLast((defs[t] || []) as unknown[]) } }));
 writes.push({ path: 'meta/settings', data: ex.settings || {} });
 Object.entries(ex.tags || {}).forEach(([id, d]) => writes.push({ path: 'tags/' + id, data: d }));
 const answers = Object.entries(ex.answers || {});
@@ -40,7 +42,7 @@ const count = (o: object | undefined) => Object.keys(o || {}).length;
 const header = [
   '-- Matchup Library data, converted from a preview download.',
   `-- Source: ${input}${ex.exportedAt ? ' (downloaded ' + ex.exportedAt + ')' : ''}`,
-  `-- ${defs.civs.length} civs, ${(defs.maps || []).length} maps, ${(defs.elements || []).length} elements, ${(defs.strategies || []).length} plays,`,
+  `-- ${defs.civs.length} civs, ${(defs.maps || []).length} maps, ${(defs.elements || []).length} elements, ${(defs.plays || []).length} plays, ${(defs.gamePlans || []).length} game plans,`,
   `-- ${count(ex.tags)} tags, ${count(ex.games)} games, ${count(ex.links)} links, ${count(ex.answers)} answers.`,
   '-- Inserts or updates only. Safe to run again.',
   ''

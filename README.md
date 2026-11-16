@@ -25,6 +25,8 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `scripts/import-preview.ts` | Turns a download (Upkeep, then Download a copy) into SQL for D1. |
 | `scripts/subjects.ts` | Loads units, buildings, landmarks and technologies from the aoe4world data repo, and copies the icons in use. |
 | `scripts/phase1-elements.ts` | One-off: moves the elements from before phase 1 onto types, icons and intent. |
+| `scripts/phase2-plays.ts` | One-off: splits the first version's plays into plays (one age each) and game plans. |
+| `scripts/backup-order.ts` | Reorders a `wrangler d1 export` file so it loads into an empty database. |
 | `data/` | Your library data (kept out of git). |
 | `docs/deferred-views.sql` | Matchup and coverage views from the design stage, set aside for later. |
 | `test/e2e.cjs` | The browser test (optional, needs Playwright). |
@@ -36,6 +38,14 @@ Every element shows as a split pill. The icon tile is coloured by the element's 
 Intent belongs to how something is used. An element has a usual intent, and every use of it (a play step, a civ tag, a game play or a moment) can set its own, along with the subject. The rule: the use's value if it has one, else the element's, else the subject's. An age-up that names a landmark shows the landmark's icon and name, coloured by the landmark's default intent, which you set under Library, Landmarks.
 
 An element every civ can do, such as a tower or a second town centre, is marked **every civ can do it**. It counts for every civ without tags, except the civs listed as unable. It counts in its usual intent only: towers used to attack still need a tag for the civs known to do it.
+
+## Plays and game plans
+
+A **play** is one age's steps in order, such as Barracks then Spears in the Dark Age. Every play has one age and a family, such as Barracks first or Straight to Castle, which groups it in the Library. A step has to be possible in the play's age.
+
+A **game plan** is one play for each age: how a game goes from the start into Castle. Each age it covers is a **stage**, with its own notes on how the play is run there. The same play can sit in many game plans.
+
+Tags and references work with all three: an element, a play or a game plan. Evidence flows down, so a civ tagged with a game plan counts for each of its plays, and each play counts for its elements in that play's age. A moment in a game or guide is either a whole game plan, or steps in one age: one element, or several, which match a saved play or become a new one.
 
 ## Deploy
 
@@ -159,7 +169,7 @@ pnpm test
 - A new game patch: run `pnpm subjects sql` again and load the file. It updates names, ages and icons, and leaves your landmark intents alone.
 - New icons: after picking subjects whose icons aren't bundled yet (they show from data.aoe4world.com meanwhile), download a copy and run `pnpm subjects icons --from data\<download>.json`. It copies only the icons in use and updates `packages/web/src/icons.generated.ts`. Commit both and deploy.
 - Watch live errors with `npx wrangler tail`.
-- Back up with **Download a copy** in Upkeep, or `npx wrangler d1 export matchup-library --remote --output backup.sql`.
+- Back up with **Download a copy** in Upkeep, or `npx wrangler d1 export matchup-library --remote --output backup.sql`. An export won't load into an empty database as it is, because some tables point at tables made after them. Run `pnpm backup-order backup.sql` first and load the `backup-load.sql` it writes.
 
 ## Troubleshooting
 

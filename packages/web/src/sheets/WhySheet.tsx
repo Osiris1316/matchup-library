@@ -1,5 +1,5 @@
-// Check detail: every reason an element or play is listed for a civ.
-import { cap, fmtTime, parsePlace, urlAt, type Place } from '@matchup-library/core';
+// Check detail: every reason an element, play or game plan is listed for a civ.
+import { STAGE_NAME, cap, fmtTime, parsePlace, urlAt, type Place } from '@matchup-library/core';
 import { L, S, civSlug, type WhySheet as WhySheetT } from '../store';
 import { openTagSheet, whyNewTag } from '../actions';
 import { Flag } from '../components/Flag';
@@ -8,15 +8,17 @@ import { SplitPill, StepPills } from '../components/Pill';
 
 export function WhySheet({ sh }: { sh: WhySheetT }) {
   const vp = parsePlace(S.ui.check.place);
-  const isPlay = sh.itemKind === 'play';
-  const def = isPlay ? L.strat(sh.id) : L.el(sh.id);
+  const isEl = sh.itemKind === 'el';
+  const def = L.itemDef(sh.itemKind, sh.id);
   if (!def) return null;
-  const ev = (isPlay ? L.playEvidence(sh.civ, sh.id, vp) : L.elementEvidence(sh.civ, sh.id, vp, null)).sort((a, b) => a.rank - b.rank);
+  const play = sh.itemKind === 'play' ? L.play(sh.id) : null;
+  const plan = sh.itemKind === 'plan' ? L.plan(sh.id) : null;
+  const ev = L.evidence(sh.itemKind, sh.civ, sh.id, vp).sort((a, b) => a.rank - b.rank);
   const hits = L.whereHits(def, vp);
   const phrase = vp.kind === 'any' ? 'on any map' : L.placePhrase(vp);
-  const steps = 'steps' in def ? def.steps : null;
+  const steps = play ? play.steps : null;
   const rows = ev.map((e, i) => {
-    if (e.kind === 'tag' || e.kind === 'viaPlay') {
+    if (e.kind === 'tag' || e.kind === 'viaPlay' || e.kind === 'viaPlan') {
       const d = L.tagDetail(e.t);
       return (
         <button key={i} type="button" className="card quiet" data-act="why-tag" data-id={e.t.id} onClick={() => openTagSheet({ tagId: e.t.id }, S.sheet)}>
@@ -51,6 +53,15 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
         </div>
       );
     }
+    if (e.kind === 'stages') {
+      return (
+        <div key={i} className="panel">
+          <span className="strong">From its plays</span>
+          {e.stages.map((x, j) => <span key={j} className="hint vs">{STAGE_NAME[x.age]}: {L.playTitle(x.play)}, {L.partText(x.ev[0])}</span>)}
+          <span className="hint">Nothing says {L.civName(sh.civ)} put these together. Tag the whole game plan if they do.</span>
+        </div>
+      );
+    }
     return (
       <div key={i} className="panel">
         <span className="strong">From its parts</span>
@@ -64,8 +75,8 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
     <>
       <div className="sheet-head">
         <div>
-          <h2 id="sheet-title">{isPlay ? def.name : <SplitPill el={sh.id} size="lg" />}</h2>
-          <span className="sublabel"><Flag id={sh.civ} /> {L.civName(sh.civ)}, {phrase}{steps ? '. ' + L.sequence(steps) : ''}</span>
+          <h2 id="sheet-title">{isEl ? <SplitPill el={sh.id} size="lg" /> : def.name}</h2>
+          <span className="sublabel"><Flag id={sh.civ} /> {L.civName(sh.civ)}, {phrase}{play ? '. ' + STAGE_NAME[play.age] + ': ' + L.sequence(play.steps) : plan ? '. ' + L.planSequence(plan) : ''}</span>
           {steps && <StepPills steps={steps} />}
         </div>
         <CloseBtn />

@@ -119,7 +119,8 @@ export async function loadState(quiet = false): Promise<void> {
 // Everything in the library as one file, for safekeeping.
 export function downloadCopy(): void {
   const d = S.data;
-  const data = { exportedAt: new Date().toISOString(), defs: d.defs, tags: d.tags, games: d.games, links: d.links, answers: d.answers, settings: d.settings };
+  // Subjects go in too, for the landmark intents set in the Library.
+  const data = { exportedAt: new Date().toISOString(), defs: d.defs, tags: d.tags, games: d.games, links: d.links, answers: d.answers, settings: d.settings, subjects: d.subjects };
   const url = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
   const a = document.createElement('a');
   a.href = url;

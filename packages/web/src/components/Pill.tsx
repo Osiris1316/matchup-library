@@ -2,7 +2,7 @@
 // coloured by intent. Each use can override the intent and the subject; the
 // display rule lives in Library.look().
 import { Fragment } from 'react';
-import { INTENT_NAME, EL_TYPE_NAME, sortedSteps, type ElType, type Intent, type Look, type Step, type UseLook } from '@matchup-library/core';
+import { INTENT_NAME, EL_TYPE_NAME, STAGE_NAME, sortedSteps, stagesOf, type ElType, type GamePlan, type Intent, type Look, type Step, type UseLook } from '@matchup-library/core';
 import { L } from '../store';
 import { BUNDLED_ICONS } from '../icons.generated';
 
@@ -76,3 +76,18 @@ export function StepPills({ steps, mini }: { steps: Step[]; mini?: boolean }) {
     </span>
   );
 }
+
+// One line per stage, in order.
+export function PlanStages({ g }: { g: GamePlan }) {
+  const stages = stagesOf(g);
+  if (!stages.length) return <span className="s">No plays yet</span>;
+  return (
+    <span className="stages">
+      {stages.map(({ age, stage }) => {
+        const p = L.play(stage.play);
+        return <span key={age} className="stage-line"><span className="sublabel">{STAGE_NAME[age]}</span>{p ? <StepPills steps={p.steps} /> : <span className="s">Unknown play</span>}</span>;
+      })}
+    </span>
+  );
+}
+

@@ -1,11 +1,14 @@
-// Library: elements (list, editor, where used), landmarks, and plays.
-import { AGES, EL_TYPES, EL_TYPE_GROUP, INTENTS, INTENT_NAME, byName, isActive, plural, type ElType, type Element, type Intent, type Strategy, type Subject } from '@matchup-library/core';
+// Library: elements (list, editor, where used), plays, game plans and landmarks.
+import {
+  AGES, EL_TYPES, EL_TYPE_GROUP, INTENTS, INTENT_NAME, STAGE_AGES, STAGE_NAME, byName, isActive, plural,
+  type ElType, type Element, type GamePlan, type Intent, type Play, type PlanStatus, type Subject
+} from '@matchup-library/core';
 import { L, S, emit, type LibrarySeg } from '../store';
-import { DEF_WORD, openElement, setSubjectIntent } from '../actions';
+import { DEF_WORD, openDef, openElement, setSubjectIntent } from '../actions';
 import { CivFlags, Flag } from '../components/Flag';
 import { DefRow, NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../components/bits';
 import { Icon } from '../components/Icon';
-import { PillFace, SplitPill, StepPills } from '../components/Pill';
+import { PillFace, PlanStages, SplitPill, StepPills } from '../components/Pill';
 import { ElementPane, UsesPane } from './ElementEditor';
 
 const AGE_LETTER = ['D', 'F', 'C', 'I'];
@@ -104,23 +107,69 @@ function LandmarkList() {
   );
 }
 
+// Plays, by age and then family.
 function PlayList() {
   const u = S.ui.library;
-  const all = S.data.defs.strategies;
+  const all = S.data.defs.plays;
+  const shown = all.filter((x) => isActive(x) || u.showRetired);
+  const ages = AGES.filter((a) => STAGE_AGES.includes(a) || shown.some((p) => p.age === a));
+  const row = (p: Play) => {
+    const refs = L.refsFor('play', p.id).length;
+    const inPlans = L.activePlans().filter((g) => g.stages[p.age]?.play === p.id);
+    // Civs that run a game plan with this play run the play too.
+    const viaPlans = new Set(L.activeTags().filter((t) => t.plan && inPlans.some((g) => g.id === t.plan)).map((t) => t.civ)).size;
+    const civs = L.civCount('play', p.id) ? '' : viaPlans ? plural(viaPlans, 'civ') + ' through game plans' : 'No civs yet';
+    return <DefRow key={p.id} type="plays" it={p}
+      sub2={[civs, inPlans.length ? 'In ' + plural(inPlans.length, 'game plan') : '', refs ? 'In ' + plural(refs, 'reference') : ''].filter(Boolean).join(' · ')}
+      extra={<><StepPills steps={p.steps} /><CivFlags field="play" id={p.id} /></>} />;
+  };
+  return (
+    <section className="block">
+      <p className="hint">A play is one age's steps in order. Game plans put one play from each age together. Open one to edit its steps or say which civs run it.</p>
+      {ages.map((a) => {
+        const inAge = shown.filter((p) => p.age === a);
+        const fams = [...new Set(inAge.map((p) => p.family || 'Other'))].sort((x, y) => (x === 'Other' ? 1 : y === 'Other' ? -1 : x.localeCompare(y)));
+        return (
+          <div key={a} className="agegroup">
+            <div className="block-head">
+              <h2 className="label">{STAGE_NAME[a]} <span className="sublabel">{inAge.filter(isActive).length}</span></h2>
+              <button type="button" className="btn btn-outline btn-sm" data-act="play-new" data-age={a} onClick={() => openDef('plays', null, { age: a })}>New {STAGE_NAME[a]} play</button>
+            </div>
+            {fams.map((f) => (
+              <div key={f} className="elgroup">
+                <h3 className="label">{f}</h3>
+                <div className="list">{inAge.filter((p) => (p.family || 'Other') === f).sort(byName).map(row)}</div>
+              </div>
+            ))}
+            {!inAge.length && <p className="empty">No {STAGE_NAME[a]} plays yet.</p>}
+          </div>
+        );
+      })}
+      <RetiredToggle act="lib-retired" on={u.showRetired} count={all.filter((x) => !isActive(x)).length} onToggle={() => { u.showRetired = !u.showRetired; emit(); }} />
+    </section>
+  );
+}
+
+const STATUS_NAME: Record<PlanStatus, string> = { idea: 'Idea', studying: 'Studying', practiced: 'Practiced', proven: 'Proven' };
+
+function GamePlanList() {
+  const u = S.ui.library;
+  const all = S.data.defs.gamePlans;
   const shown = all.filter((x) => isActive(x) || u.showRetired);
   return (
     <section className="block">
-      <p className="hint">Elements put together in order. Open one to edit its steps or say which civs run it.</p>
+      <p className="hint">A game plan is one play for each age: how a game goes from the start into Castle. Open one to change a stage or say which civs run it.</p>
       {shown.length
         ? <div className="list">
-            {shown.slice().sort(byName).map((s: Strategy) => {
-              const refs = L.refsFor('play', s.id).length;
-              return <DefRow key={s.id} type="strategies" it={s} sub2={[L.civCount('play', s.id) ? '' : 'No civs yet', refs ? 'In ' + plural(refs, 'reference') : ''].filter(Boolean).join(' · ')}
-                extra={<><StepPills steps={s.steps} /><CivFlags field="play" id={s.id} /></>} />;
+            {shown.slice().sort(byName).map((g) => {
+              const refs = L.refsFor('plan', g.id).length;
+              return <DefRow key={g.id} type="gamePlans" it={g}
+                sub2={[g.status ? STATUS_NAME[g.status] : '', L.civCount('plan', g.id) ? '' : 'No civs yet', refs ? 'In ' + plural(refs, 'reference') : ''].filter(Boolean).join(' · ')}
+                extra={<><PlanStages g={g} /><CivFlags field="plan" id={g.id} /></>} />;
             })}
           </div>
         : <p className="empty">Nothing here yet.</p>}
-      <NewButton type="strategies" word={DEF_WORD.strategies} />
+      <NewButton type="gamePlans" word={DEF_WORD.gamePlans} />
       <RetiredToggle act="lib-retired" on={u.showRetired} count={all.filter((x) => !isActive(x)).length} onToggle={() => { u.showRetired = !u.showRetired; emit(); }} />
     </section>
   );
@@ -133,7 +182,7 @@ export function LibraryView() {
       <PageHead title="Library" aside={<UpkeepLink />} />
       <main className="main">
         <div className="lib-top">
-          <Seg label="Show" act="lib-seg" options={[['elements', 'Elements'], ['landmarks', 'Landmarks'], ['strategies', 'Plays']] as [LibrarySeg, string][]} current={u.seg}
+          <Seg label="Show" act="lib-seg" options={[['elements', 'Elements'], ['plays', 'Plays'], ['gamePlans', 'Game plans'], ['landmarks', 'Landmarks']] as [LibrarySeg, string][]} current={u.seg}
             onPick={(v) => { u.seg = v; S.panel.open = null; emit(); }} />
         </div>
         {u.seg === 'elements' && (
@@ -144,7 +193,8 @@ export function LibraryView() {
           </div>
         )}
         {u.seg === 'landmarks' && <LandmarkList />}
-        {u.seg === 'strategies' && <PlayList />}
+        {u.seg === 'plays' && <PlayList />}
+        {u.seg === 'gamePlans' && <GamePlanList />}
         <p className="notice">
           Icons from the <a href="https://github.com/aoe4world/data" target="_blank" rel="noopener">AoE4 World data repo</a>.
           Age of Empires IV © Microsoft Corporation. Matchup Library was created under Microsoft's "<a href="https://www.xbox.com/en-US/developers/rules" target="_blank" rel="noopener">Game Content Usage Rules</a>" using assets

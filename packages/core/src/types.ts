@@ -49,32 +49,47 @@ export interface Element {
   cannot?: string[];
 }
 // One element of a play. Same step = at the same time; a higher step comes later.
+// In a play every step's age is the play's age.
 export interface Step extends UseLook { el: string; age: Age | null; step: number; notes: string }
-export interface Strategy {
-  id: string; name: string; description: string; notes: string; steps: Step[];
+// One way to play one age, such as "Spears, then towers" in the Dark Age.
+// Plays are grouped within their age by family, such as "Barracks first".
+export interface Play {
+  id: string; name: string; age: Age; family: string; description: string; tells: string; notes: string;
+  steps: Step[]; where: Place[]; whereNote: string; active: boolean; mergedInto: string | null;
+}
+// A game plan: one play per age, the spine. A stage's notes say what this
+// plan does in that age beyond the play itself.
+export interface Stage { play: string; notes: string }
+export type PlanStatus = 'idea' | 'studying' | 'practiced' | 'proven';
+export interface GamePlan {
+  id: string; name: string; description: string; notes: string; status: PlanStatus | null;
+  stages: Partial<Record<Age, Stage>>;
   where: Place[]; whereNote: string; active: boolean; mergedInto: string | null;
 }
 export interface Defs {
   civs: Civ[]; mapTypes: MapType[]; features: Feature[]; maps: MapDef[];
-  kinds: Kind[]; elements: Element[]; strategies: Strategy[];
+  kinds: Kind[]; elements: Element[]; plays: Play[]; gamePlans: GamePlan[];
 }
 export type DefType = keyof Defs;
-export const DEF_TYPES: DefType[] = ['civs', 'mapTypes', 'features', 'maps', 'kinds', 'elements', 'strategies'];
+export const DEF_TYPES: DefType[] = ['civs', 'mapTypes', 'features', 'maps', 'kinds', 'elements', 'plays', 'gamePlans'];
+// The ages the library works in. Imperial stays in the data but isn't shown.
+export const STAGE_AGES: Age[] = ['dark', 'feudal', 'castle'];
+export const STAGE_NAME: Record<Age, string> = { dark: 'Dark Age', feudal: 'Feudal Age', castle: 'Early Castle', imperial: 'Imperial' };
 
 // ---------------------------------------------------------------------------
 // Records
 // ---------------------------------------------------------------------------
-// A civ does an element (optionally in one age) or a whole play, in a place.
+// A civ does an element (optionally in one age), a play or a whole game plan, in a place.
 export interface Tag extends UseLook {
-  civ: string; el: string | null; play: string | null; age: Age | null; place: Place;
+  civ: string; el: string | null; play: string | null; plan?: string | null; age: Age | null; place: Place;
   timing: string; tells: string; notes: string; confirmed: string | null; active: boolean;
   createdAt?: string | null; copiedFrom?: string;
 }
 export type Outcome = 'worked' | 'mixed' | 'failed';
 export type Prep = 'did_not_see' | 'saw_no_plan' | 'plan_misexecuted' | 'handled';
-// What one side did in a game: a whole play, or one element with its age.
+// What one side did in a game: a game plan, a play, or one element with its age.
 export interface GamePlay extends UseLook {
-  pid: string; runBy: 'player' | 'opponent'; strategyId: string | null; elementId?: string | null; age?: Age | null;
+  pid: string; runBy: 'player' | 'opponent'; planId?: string | null; playId?: string | null; elementId?: string | null; age?: Age | null;
   outcome: Outcome | null; prep: Prep | null; answerId: string | null; did: string; notes: string;
 }
 export interface Game {
@@ -83,11 +98,11 @@ export interface Game {
   aoe4worldGameId: number | null; createdAt?: string | null; plays: GamePlay[];
 }
 export type Shows = 'threat' | 'response' | 'both';
-// A timestamped moment in a link. In a game's link it points at a play; in a
-// guide it names the civ and what it shows.
+// A timestamped moment in a link. In a game's link it points at one of the
+// game's plays (gamePlayId); in a guide it names the civ and what it shows.
 export interface Mark extends UseLook {
-  mid: string; at: number | null; playId: string | null; civ: string | null;
-  elementId: string | null; strategyId: string | null; age: Age | null; shows: Shows | null; note: string;
+  mid: string; at: number | null; gamePlayId: string | null; civ: string | null;
+  elementId: string | null; playId?: string | null; planId?: string | null; age: Age | null; shows: Shows | null; note: string;
 }
 export type Source = 'youtube' | 'twitch_vod' | 'twitch_highlight' | 'twitch_clip' | 'aoe4world' | 'own_site' | 'other';
 export interface Link {
@@ -128,5 +143,5 @@ export interface CommitBody { label?: string; writes: DocWrite[]; before?: DocWr
 export interface CommitResult { ok: true; change: { id: string; label: string; at: string } | null }
 
 export function emptyDefs(): Defs {
-  return { civs: [], mapTypes: [], features: [], maps: [], kinds: [], elements: [], strategies: [] };
+  return { civs: [], mapTypes: [], features: [], maps: [], kinds: [], elements: [], plays: [], gamePlans: [] };
 }

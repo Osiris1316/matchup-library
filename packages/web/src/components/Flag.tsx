@@ -1,4 +1,5 @@
 // Civ flags, from the league manager. Files live in public/flags.
+import { tagField, tagTargetId, type ItemKind } from '@matchup-library/core';
 import { L } from '../store';
 
 const FLAG_FILES = new Set(['abbasid-dynasty', 'ayyubids', 'byzantines', 'chinese', 'delhi-sultanate', 'english', 'french', 'golden-horde', 'holy-roman-empire',
@@ -26,8 +27,8 @@ export function FlagOr({ id, lg = false }: { id: string | null | undefined; lg?:
 }
 
 // Every civ tagged with an element or play, as a row of flags.
-export function CivFlags({ field, id }: { field: 'el' | 'play'; id: string }) {
-  const ids = [...new Set(L.activeTags().filter((t) => t[field] === id).map((t) => t.civ))]
+export function CivFlags({ field, id }: { field: ItemKind; id: string }) {
+  const ids = [...new Set(L.activeTags().filter((t) => tagField(t) === field && tagTargetId(t) === id).map((t) => t.civ))]
     .filter((c) => L.civ(c) && L.civ(c)?.active !== false)
     .sort((a, b) => L.civName(a).localeCompare(L.civName(b)));
   if (!ids.length) return null;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { Library, builderToSteps, stepsToBuilder, tagKey, type Place } from '../src';
+import { Library, builderToSteps, stepsToBuilder, tagKey, type Place, type Tag } from '../src';
 import { fixture } from './fixture';
 
 const any: Place = { kind: 'any' };
@@ -29,13 +29,25 @@ describe('places', () => {
 describe('plays', () => {
   const L = new Library(fixture());
   it('writes steps as a signature and a sentence', () => {
-    const s = L.strat('barracks_towers');
-    expect(s && L.signature(s.steps)).toBe('barracks>towers@dark');
-    expect(s && L.sequence(s.steps)).toBe('Dark Age barracks, then Tower rush in Dark Age');
+    const p = L.play('barracks_towers');
+    expect(p && L.playSignature(p)).toBe('dark:barracks>towers');
+    expect(p && L.sequence(p.steps)).toBe('Dark Age barracks, then Tower rush');
+    expect(L.planSequence(L.plan('towers_into_castle'))).toBe('Dark: Barracks into towers. Feudal: Naked castle');
   });
   it('round-trips steps through the builder', () => {
     const steps = [{ el: 'a', age: null, step: 1, notes: '' }, { el: 'b', age: null, step: 1, notes: '' }, { el: 'c', age: null, step: 2, notes: '' }];
     expect(builderToSteps(stepsToBuilder(steps))).toEqual(steps);
+  });
+  it('matches saved plays only in the same age, and adds new ones with the age in the id', () => {
+    const rows = stepsToBuilder([{ el: 'barracks', age: null, step: 1, notes: '' }, { el: 'towers', age: null, step: 2, notes: '' }]);
+    expect(L.matchPlay(rows, 'dark')?.id).toBe('barracks_towers');
+    expect(L.matchPlay(rows, 'feudal')).toBeNull();
+    const items = L.data.defs.plays.map((p) => ({ ...p }));
+    expect(L.resolvePlay(rows, 'dark', '', items)).toEqual({ id: 'barracks_towers' });
+    const towers = stepsToBuilder([{ el: 'towers', age: null, step: 1, notes: '' }]);
+    const r = L.resolvePlay(towers, 'feudal', 'Feudal towers', items);
+    expect(r).toEqual({ id: 'feudal_feudal_towers', created: true, name: 'Feudal towers' });
+    expect(items.find((p) => p.id === r.id)).toMatchObject({ age: 'feudal', family: 'Straight to Castle', steps: [{ el: 'towers', age: 'feudal' }] });
   });
 });
 
@@ -67,6 +79,40 @@ describe('evidence', () => {
   });
 });
 
+describe('game plans', () => {
+  const tagged = (t: Partial<Tag>) => {
+    const data = fixture();
+    data.tags.g = { civ: 'ottomans', el: null, play: null, plan: null, age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true, ...t };
+    return new Library(data);
+  };
+  it('pass a tag down to their plays and those plays\' elements, in the play\'s age', () => {
+    const L = tagged({ civ: 'rus', plan: 'towers_into_castle' });
+    expect(L.planEvidence('rus', 'towers_into_castle', any).map((e) => e.kind)).toEqual(['tag']);
+    expect(L.playEvidence('rus', 'nfc', any).map((e) => e.kind)).toEqual(['viaPlan']);
+    expect(L.elementEvidence('rus', 'castle', any, 'feudal').map((e) => e.kind)).toEqual(['tag', 'viaPlan']);
+    expect(L.elementEvidence('rus', 'castle', any, 'dark').map((e) => e.kind)).toEqual(['tag']);
+    expect(L.evText(L.playEvidence('rus', 'nfc', any)[0]!, 'play')).toBe('Part of Towers into naked castle, tagged anywhere');
+  });
+  it('count from their stages when every stage\'s play is documented', () => {
+    const L = tagged({ play: 'nfc' });
+    expect(L.planEvidence('ottomans', 'towers_into_castle', any).map((e) => e.kind)).toEqual(['stages']);
+    expect(new Library(fixture()).planEvidence('ottomans', 'towers_into_castle', any)).toEqual([]);
+  });
+  it('say whether a moment shows an item directly or as part of something bigger', () => {
+    const L = new Library(fixture());
+    expect(L.shows({ planId: 'towers_into_castle' }, 'play', 'nfc')).toBe('via');
+    expect(L.shows({ playId: 'barracks_towers' }, 'el', 'towers')).toBe('via');
+    expect(L.shows({ playId: 'nfc' }, 'play', 'nfc')).toBe('direct');
+    expect(L.shows({ elementId: 'walls' }, 'el', 'towers')).toBeNull();
+  });
+  it('suggest a family from a play\'s steps', () => {
+    const L = new Library(fixture());
+    expect(L.suggestFamily(L.play('barracks_towers')!.steps, 'dark')).toBe('Barracks first');
+    expect(L.suggestFamily(L.play('nfc')!.steps, 'feudal')).toBe('Straight to Castle');
+    expect(L.suggestFamily([{ el: 'tower', age: 'dark', step: 1, notes: '' }], 'dark')).toBe('Towers first');
+  });
+});
+
 describe('looks', () => {
   const L = new Library(fixture());
   it('takes intent from the use, then the element, then the subject', () => {
@@ -79,8 +125,8 @@ describe('looks', () => {
   });
   it('writes step overrides into the signature and the sentence', () => {
     const steps = [{ el: 'tower', age: 'dark' as const, step: 1, notes: '', intent: 'offensive' as const }, { el: 'castle', age: null, step: 2, notes: '', subject: 'regnitz-cathedral' }];
-    expect(L.signature(steps)).toBe('tower@dark!offensive>castle#regnitz-cathedral');
-    expect(L.sequence(steps)).toBe('Tower (offensive) in Dark Age, then Naked castle (Regnitz Cathedral)');
+    expect(L.signature(steps, 'dark')).toBe('dark:tower!offensive>castle#regnitz-cathedral');
+    expect(L.sequence(steps)).toBe('Tower (offensive), then Naked castle (Regnitz Cathedral)');
     expect(builderToSteps(stepsToBuilder(steps))).toEqual(steps);
   });
   it('keeps tags with different intents apart', () => {
@@ -110,9 +156,17 @@ describe('upkeep', () => {
     data.defs.elements[2]!.kind = 'army';
     expect(new Library(data).health().issues).toEqual(['1 element has no type yet (unit, structure, economy, or age-up or tech)']);
   });
-  it('finds plays with the same steps', () => {
+  it('finds plays with the same steps in the same age', () => {
     const data = fixture();
-    data.defs.strategies.push({ ...data.defs.strategies[0]!, id: 'copy', name: 'Copy' });
+    data.defs.plays.push({ ...data.defs.plays[0]!, id: 'copy', name: 'Copy' }, { ...data.defs.plays[0]!, id: 'later', name: 'Later', age: 'feudal' });
     expect(new Library(data).health().dupes.map((g) => g.map((s) => s.id))).toEqual([['barracks_towers', 'copy']]);
+  });
+  it('finds game plans with the same stages, and stages in the wrong age', () => {
+    const data = fixture();
+    data.defs.gamePlans.push({ ...data.defs.gamePlans[0]!, id: 'twin', name: 'Twin' });
+    data.defs.gamePlans.push({ ...data.defs.gamePlans[0]!, id: 'odd', name: 'Odd', stages: { castle: { play: 'nfc', notes: '' } } });
+    const h = new Library(data).health();
+    expect(h.planDupes.map((g) => g.map((s) => s.id))).toEqual([['towers_into_castle', 'twin']]);
+    expect(h.issues).toEqual(['1 game plan stage holds a play from another age']);
   });
 });
