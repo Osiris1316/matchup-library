@@ -3,7 +3,7 @@
 // version worked, so the saving and undo logic carries over unchanged.
 import { useSyncExternalStore } from 'react';
 import {
-  Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type ItemKind, type LibraryData,
+  Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type Intent, type ItemKind, type LibraryData,
   type Outcome, type Place, type PlaceKind, type Prep, type Shows
 } from '@matchup-library/core';
 
@@ -15,6 +15,7 @@ export type PlaceDraft = { kind: PlaceKind; id: string | null };
 export interface DefDraft {
   name: string; description: string;
   kind: string; ages: Age[]; tells: string;                   // elements
+  subject: string; intent: Intent | ''; universal: boolean; cannot: string[];
   builder: BuilderRow[];                                      // plays
   where: Place[]; whereNote: string; civOn: string[];         // elements and plays
   mapsOn: string[];                                           // features
@@ -24,6 +25,7 @@ export interface DefDraft {
 export interface TagDraft {
   tagId: string | null; civ: string; field: ItemKind; target: string; place: PlaceDraft;
   age: Age | null; timing: string; tells: string; notes: string;
+  intent: Intent | ''; subject: string;                       // element tags only
 }
 export interface BulkDraft { civ: string; seg: ItemKind; place: PlaceDraft; pickedEl: string[]; pickedPlay: string[] }
 export type RefKind = 'mine' | 'game' | 'guide';
@@ -52,7 +54,7 @@ export type Sheet = DefSheet | TagSheet | BulkSheet | WhySheet | UpkeepSheet | M
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NewSheet = DistributiveOmit<Sheet, 'sid'>;
 
-export type LibrarySeg = 'elements' | 'strategies' | 'kinds';
+export type LibrarySeg = 'elements' | 'landmarks' | 'strategies';
 export type MapsSeg = 'maps' | 'features' | 'mapTypes';
 export type CheckSeg = 'plays' | 'elements' | 'mine';
 export type RefsSeg = 'all' | 'mine' | 'games' | 'guides';
@@ -67,7 +69,8 @@ export const S = {
   view: 'library',
   lastView: null as string | null,
   ui: {
-    library: { seg: 'elements' as LibrarySeg, showRetired: false },
+    // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
+    library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
     civs: { showRetired: false },
     civ: { showRetired: false },
     maps: { seg: 'maps' as MapsSeg, showRetired: false },
@@ -75,6 +78,8 @@ export const S = {
     refs: { seg: 'all' as RefsSeg, url: '' }
   },
   sheet: null as Sheet | null,
+  // Which dropdown checklist is open outside a sheet (the Library editor).
+  panel: { open: null as string | null },
   toast: null as Toast | null,
   refDefaults: {} as { myCiv?: string; guideCiv?: string },
   lastSide: 'opponent' as Side

@@ -1,7 +1,8 @@
 // The matchup rules: what a civ is documented doing in a place, and why.
 // A Library wraps the loaded data. It never changes the data; it only reads it.
-import { AGES, AGE_NAME, type Age, type Civ, type Element, type Feature, type Game, type GamePlay, type Kind, type LibraryData,
-  type Link, type MapDef, type MapType, type Mark, type Place, type PlaceKind, type Step, type Strategy, type Tag } from './types';
+import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, type Age, type Civ, type ElType, type Element, type Feature, type Game, type GamePlay, type Intent,
+  type Kind, type LibraryData, type Link, type MapDef, type MapType, type Mark, type Place, type PlaceKind, type Step, type Strategy, type Subject,
+  type Tag, type UseLook } from './types';
 import { byName, cap, fmtDate, fmtTime, hostOf, lowerFirst, plural, slug } from './text';
 
 export type TagWithId = Tag & { id: string };
@@ -13,14 +14,20 @@ export type Evidence =
   | { kind: 'viaPlay'; t: TagWithId; rel: Relation; rank: number }
   | ({ kind: 'game'; rank: number } & PlayRef)
   | ({ kind: 'guide'; rank: number } & GuideRef)
-  | { kind: 'parts'; parts: { st: Step; ev: Evidence[] }[]; rank: number };
+  | { kind: 'parts'; parts: { st: Step; ev: Evidence[] }[]; rank: number }
+  | { kind: 'universal'; rank: number };
 export type ItemKind = 'el' | 'play';
-export interface Moment {
+export interface Moment extends UseLook {
   key: string; i: number; at: number | null; civ: string | null; strategyId: string | null; elementId: string | null;
   age: Age | null; note: string; outcome?: GamePlay['outcome']; shows?: Mark['shows'];
 }
 export interface RefItem { kind: 'mine' | 'game' | 'guide'; id: string; route: string; title: string; created: string; date: string; count: number; source: Link['source'] | null; civ?: string | null }
-export interface BuilderRow { el: string; age: Age | null; join: boolean }
+export interface BuilderRow extends UseLook { el: string; age: Age | null; join: boolean }
+// How one use of an element looks: the split pill's parts.
+export interface Look {
+  el: string; name: string; title: string; type: ElType | null; intent: Intent | null;
+  subject: Subject | null; icon: string | null; landmark: boolean;
+}
 
 export const isActive = (x: { active?: boolean } | null | undefined): boolean => !!x && x.active !== false;
 export const placeKey = (p: { kind: PlaceKind; id?: string | null } | null | undefined): string => (p && p.kind !== 'any' ? p.kind + ':' + (p.id || '') : 'any:');
@@ -30,22 +37,31 @@ export function parsePlace(key: string): Place {
   return { kind: 'any' };
 }
 export const fitsAge = (a: Age | null | undefined, b: Age | null | undefined): boolean => !a || !b || a === b;
+export const fitsIntent = (want: Intent | null | undefined, have: Intent | null | undefined): boolean => !want || !have || want === have;
+// Only overrides that are set, so records stay as small as before.
+export function lookOf(x: UseLook | null | undefined): UseLook {
+  const o: UseLook = {};
+  if (x && x.intent) o.intent = x.intent;
+  if (x && x.subject) o.subject = x.subject;
+  return o;
+}
 export function builderToSteps(b: BuilderRow[]): Step[] {
   let n = 0;
-  return b.map((x, i) => { if (i === 0 || !x.join) n += 1; return { el: x.el, age: x.age || null, step: n, notes: '' }; });
+  return b.map((x, i) => { if (i === 0 || !x.join) n += 1; return { el: x.el, age: x.age || null, step: n, notes: '', ...lookOf(x) }; });
 }
 export function sortedSteps(steps: Step[]): Step[] {
   return (steps || []).slice().sort((a, b) => a.step - b.step || (a.el < b.el ? -1 : a.el > b.el ? 1 : 0));
 }
 export function stepsToBuilder(steps: Step[]): BuilderRow[] {
   const s = sortedSteps(steps);
-  return s.map((st, i) => ({ el: st.el, age: st.age || null, join: i > 0 && st.step === (s[i - 1] as Step).step }));
+  return s.map((st, i) => ({ el: st.el, age: st.age || null, join: i > 0 && st.step === (s[i - 1] as Step).step, ...lookOf(st) }));
 }
 export const tagField = (t: Tag): ItemKind => (t.play ? 'play' : 'el');
 export const tagTargetId = (t: Tag): string => (t.play || t.el || '');
-export const tagKey = (t: Tag): string => t.civ + '|' + tagField(t) + ':' + tagTargetId(t) + '|' + (t.age || '') + '|' + placeKey(t.place);
-export const tagKeyOf = (civ: string, field: ItemKind, id: string, age: Age | null, place: Place): string =>
-  civ + '|' + field + ':' + id + '|' + (age || '') + '|' + placeKey(place);
+// Matches the unique index on tags: civ, target, age, place and intent.
+export const tagKey = (t: Tag): string => t.civ + '|' + tagField(t) + ':' + tagTargetId(t) + '|' + (t.age || '') + '|' + placeKey(t.place) + '|' + (t.play ? '' : t.intent || '');
+export const tagKeyOf = (civ: string, field: ItemKind, id: string, age: Age | null, place: Place, intent: Intent | null = null): string =>
+  civ + '|' + field + ':' + id + '|' + (age || '') + '|' + placeKey(place) + '|' + (field === 'el' ? intent || '' : '');
 export const ranCiv = (g: Game, p: GamePlay): string | null => (p.runBy === 'player' ? g.playerCiv : g.oppCiv);
 export const timed = (l: Link | null | undefined): boolean => !!l && l.source !== 'aoe4world';
 export const guideTitle = (l: Link | null | undefined): string => (l && (l.title || hostOf(l.url))) || 'Guide';
@@ -71,13 +87,49 @@ export class Library {
   playTitle(id: string | null | undefined): string { const s = this.strat(id); return s ? s.name : 'Unknown play'; }
   elAges(id: string | null | undefined): Age[] { const e = this.el(id); return e && e.ages && e.ages.length ? e.ages : AGES; }
   activeCivs(): Civ[] { return this.data.defs.civs.filter(isActive).slice().sort(byName); }
+
+  // -------------------------------------------------------------- looks: type, intent, subject
+  subject(id: string | null | undefined): Subject | null { return (id && this.data.subjects && this.data.subjects[id]) || null; }
+  subjects(): Subject[] { return Object.values(this.data.subjects || {}); }
+  elType(id: string | null | undefined): ElType | null { const e = this.el(id); return e && EL_TYPES.includes(e.kind as ElType) ? (e.kind as ElType) : null; }
+  // An element's default intent: its own, else its subject's.
+  elIntent(id: string | null | undefined): Intent | null { const e = this.el(id); return (e && (e.intent || (this.subject(e.subject) || { defaultIntent: null }).defaultIntent)) || null; }
+  // The display rule: the use's override if set, else the element's default,
+  // else the subject's default. An age-up with a landmark shows the landmark.
+  look(elId: string | null | undefined, use?: UseLook | null): Look {
+    const e = this.el(elId);
+    const sj = this.subject((use && use.subject) || (e && e.subject));
+    const type = this.elType(elId);
+    const landmark = !!sj && sj.kind === 'landmark' && type === 'age_tech';
+    const name = e ? e.name : 'Unknown element';
+    return {
+      el: elId || '', name: landmark && sj ? sj.name : name, title: landmark && sj ? name + ': ' + sj.name : name, type,
+      intent: (use && use.intent) || (e && e.intent) || (sj && sj.defaultIntent) || null, subject: sj, icon: sj ? sj.icon : null, landmark
+    };
+  }
+  isUniversal(id: string | null | undefined): boolean { const e = this.el(id); return !!e && !!e.universal; }
+  cannot(civId: string, elId: string): boolean { const e = this.el(elId); return !!e && (e.cannot || []).includes(civId); }
+  // What a use adds to an element's text name: a landmark, or an intent that differs from the default.
+  useNote(elId: string, use: UseLook | null | undefined): string {
+    const parts: string[] = [];
+    const sj = use && use.subject ? this.subject(use.subject) : null;
+    if (sj) parts.push(sj.name);
+    if (use && use.intent && use.intent !== this.elIntent(elId)) parts.push(INTENT_NAME[use.intent].toLowerCase());
+    return parts.join(', ');
+  }
   activeTypes(): MapType[] { return this.data.defs.mapTypes.filter(isActive); }
   activeFeatures(): Feature[] { return this.data.defs.features.filter(isActive); }
   mapsOfType(typeId: string): MapDef[] { return this.data.defs.maps.filter((m) => isActive(m) && m.type === typeId).sort(byName); }
 
   // -------------------------------------------------------------- plays as steps
-  stepToken(st: Step): string { return st.el + (st.age && this.elAges(st.el).length > 1 ? '@' + st.age : ''); }
-  stepLabel(st: Step): string { return this.elName(st.el) + (st.age && this.elAges(st.el).length > 1 ? ' in ' + AGE_NAME[st.age] + ' Age' : ''); }
+  // '!intent' and '#subject' only when the step overrides them.
+  stepToken(st: Step): string {
+    return st.el + (st.age && this.elAges(st.el).length > 1 ? '@' + st.age : '') + (st.intent ? '!' + st.intent : '') + (st.subject ? '#' + st.subject : '');
+  }
+  stepLabel(st: Step): string {
+    const note = this.useNote(st.el, st);
+    return this.elName(st.el) + (note ? ' (' + note + ')' : '') + (st.age && this.elAges(st.el).length > 1 ? ' in ' + AGE_NAME[st.age] + ' Age' : '');
+  }
   // "dark_barracks>tower_rush@dark": '>' later, '+' same step, '@age' only when it matters.
   signature(steps: Step[]): string {
     let out = '', prev: number | null = null;
@@ -89,9 +141,11 @@ export class Library {
     sortedSteps(steps).forEach((st, i) => { out += (i === 0 ? '' : st.step === prev ? ' with ' : ', then ') + this.stepLabel(st); prev = st.step; });
     return out;
   }
-  containsEl(sid: string, elId: string, age: Age | null): boolean {
+  // The intent a use actually has, for matching: its override, else the element's default.
+  useIntent(elId: string, use: UseLook | null | undefined): Intent | null { return (use && use.intent) || this.elIntent(elId); }
+  containsEl(sid: string, elId: string, age: Age | null, intent: Intent | null = null): boolean {
     const s = this.strat(sid);
-    return !!s && s.steps.some((st) => st.el === elId && fitsAge(st.age, age));
+    return !!s && s.steps.some((st) => st.el === elId && fitsAge(st.age, age) && fitsIntent(intent, this.useIntent(elId, st)));
   }
   // The saved play with these steps, preferring the one being edited.
   matchPlay(builder: BuilderRow[], orig?: string | null): Strategy | null {
@@ -210,20 +264,25 @@ export class Library {
     });
     return out;
   }
-  elementEvidence(civId: string, elId: string, vp: Place, age: Age | null): Evidence[] {
+  // intent narrows the match when a play step asks for a particular use.
+  // A universal element counts for every civ that can do it, in its default
+  // intent; a different use (towers used offensively, say) still needs a tag.
+  elementEvidence(civId: string, elId: string, vp: Place, age: Age | null, intent: Intent | null = null): Evidence[] {
     const out: Evidence[] = [];
+    const fits = (use: UseLook | null | undefined) => fitsIntent(intent, this.useIntent(elId, use));
     this.civTags(civId).forEach((t) => {
       const rel = this.relation(t.place, vp);
       if (rel === 'none') return;
-      if (t.el === elId && fitsAge(t.age, age)) out.push({ kind: 'tag', t, rel, rank: rel === 'narrower' ? 1 : 0 });
-      if (t.play && this.containsEl(t.play, elId, age)) out.push({ kind: 'viaPlay', t, rel, rank: 2 });
+      if (t.el === elId && fitsAge(t.age, age) && fits(t)) out.push({ kind: 'tag', t, rel, rank: rel === 'narrower' ? 1 : 0 });
+      if (t.play && this.containsEl(t.play, elId, age, intent)) out.push({ kind: 'viaPlay', t, rel, rank: 2 });
     });
     this.gamePlays(civId, vp).forEach((x) => {
-      if (x.p.strategyId ? this.containsEl(x.p.strategyId, elId, age) : x.p.elementId === elId && fitsAge(x.p.age, age)) out.push({ kind: 'game', ...x, rank: 3 });
+      if (x.p.strategyId ? this.containsEl(x.p.strategyId, elId, age, intent) : x.p.elementId === elId && fitsAge(x.p.age, age) && fits(x.p)) out.push({ kind: 'game', ...x, rank: 3 });
     });
     this.guideMarks(civId, vp).forEach((x) => {
-      if (x.m.strategyId ? this.containsEl(x.m.strategyId, elId, age) : x.m.elementId === elId && fitsAge(x.m.age, age)) out.push({ kind: 'guide', ...x, rank: 3 });
+      if (x.m.strategyId ? this.containsEl(x.m.strategyId, elId, age, intent) : x.m.elementId === elId && fitsAge(x.m.age, age) && fits(x.m)) out.push({ kind: 'guide', ...x, rank: 3 });
     });
+    if (this.isUniversal(elId) && !this.cannot(civId, elId) && (!intent || intent === this.elIntent(elId))) out.push({ kind: 'universal', rank: 5 });
     return out;
   }
   playEvidence(civId: string, sid: string, vp: Place): Evidence[] {
@@ -234,13 +293,14 @@ export class Library {
     this.gamePlays(civId, vp).forEach((x) => { if (x.p.strategyId === sid) out.push({ kind: 'game', ...x, rank: 3 }); });
     this.guideMarks(civId, vp).forEach((x) => { if (x.m.strategyId === sid) out.push({ kind: 'guide', ...x, rank: 3 }); });
     if (!out.length && s.steps.length) {
-      const parts = sortedSteps(s.steps).map((st) => ({ st, ev: this.elementEvidence(civId, st.el, vp, st.age).sort((a, b) => a.rank - b.rank) }));
+      const parts = sortedSteps(s.steps).map((st) => ({ st, ev: this.elementEvidence(civId, st.el, vp, st.age, st.intent || null).sort((a, b) => a.rank - b.rank) }));
       if (parts.every((x) => x.ev.length)) out.push({ kind: 'parts', parts, rank: 4 });
     }
     return out;
   }
+  // Universal elements are implied, so they only show when something else documents them.
   civElements(civId: string, vp: Place): { id: string; ev: Evidence[] }[] {
-    return this.data.defs.elements.filter(isActive).map((e) => ({ id: e.id, ev: this.elementEvidence(civId, e.id, vp, null) })).filter((x) => x.ev.length)
+    return this.data.defs.elements.filter(isActive).map((e) => ({ id: e.id, ev: this.elementEvidence(civId, e.id, vp, null).filter((x) => x.kind !== 'universal') })).filter((x) => x.ev.length)
       .sort((a, b) => minRank(a.ev) - minRank(b.ev) || this.elName(a.id).localeCompare(this.elName(b.id)));
   }
   civPlays(civId: string, vp: Place): { id: string; ev: Evidence[] }[] {
@@ -270,7 +330,8 @@ export class Library {
   }
   tagReason(t: Tag, rel: Relation): string {
     const age = this.tagAgeText(t);
-    return (rel === 'narrower' ? 'Tagged only ' : 'Tagged ') + this.placePhrase(t.place) + (age ? ', ' + age : '');
+    const note = t.el ? this.useNote(t.el, t) : '';
+    return (rel === 'narrower' ? 'Tagged only ' : 'Tagged ') + this.placePhrase(t.place) + (age ? ', ' + age : '') + (note ? ', ' + note : '');
   }
   gameReason(g: Game): string {
     const m = g.map ? this.map(g.map) : null;
@@ -284,6 +345,7 @@ export class Library {
       return this.gameReason(e.g) + (mk && mk.m.at != null ? ', at ' + fmtTime(mk.m.at) : '') + (itemKind === 'el' && e.p.strategyId ? ', in ' + this.playTitle(e.p.strategyId) : '');
     }
     if (e.kind === 'guide') return 'Shown in a guide: ' + guideTitle(e.l) + (e.m.at != null ? ', at ' + fmtTime(e.m.at) : '') + (itemKind === 'el' && e.m.strategyId ? ', in ' + this.playTitle(e.m.strategyId) : '');
+    if (e.kind === 'universal') return 'Every civ can do it';
     return 'From its parts, each one tagged or seen';
   }
   partText(e: Evidence | undefined): string {
@@ -291,6 +353,7 @@ export class Library {
     if (e.kind === 'tag') return e.rel === 'narrower' ? 'tagged for some maps' : 'tagged';
     if (e.kind === 'viaPlay') return 'part of ' + this.playTitle(e.t.play);
     if (e.kind === 'guide') return 'shown in a guide';
+    if (e.kind === 'universal') return 'every civ can';
     return 'seen in a game';
   }
 
@@ -308,6 +371,8 @@ export class Library {
     const mergedRefs = this.allPlays().filter(({ p }) => p.strategyId && merged.has(p.strategyId)).length + this.activeTags().filter((t) => t.play && merged.has(t.play)).length;
     if (ageConflicts) issues.push(plural(ageConflicts, 'step or tag uses an age its element no longer allows', 'steps or tags use ages their elements no longer allow'));
     if (mergedRefs) issues.push(plural(mergedRefs, 'record still points at a merged play', 'records still point at merged plays'));
+    const untyped = this.data.defs.elements.filter((e) => isActive(e) && !this.elType(e.id)).length;
+    if (untyped) issues.push(plural(untyped, 'element has no type yet', 'elements have no type yet') + ' (unit, structure, economy, or age-up or tech)');
     return { dupes, issues };
   }
 
@@ -358,16 +423,19 @@ export class Library {
   gameMoments(gid: string, g: Game): Moment[] {
     return (g.plays || []).map((p, i) => {
       const mk = this.gameMark(gid, p.pid);
-      return { key: p.pid, i, at: mk ? mk.m.at : null, civ: ranCiv(g, p), strategyId: p.strategyId || null, elementId: p.elementId || null, age: p.age || null, note: p.notes || '', outcome: p.outcome || null };
+      return { key: p.pid, i, at: mk ? mk.m.at : null, civ: ranCiv(g, p), strategyId: p.strategyId || null, elementId: p.elementId || null, age: p.age || null, note: p.notes || '', outcome: p.outcome || null, ...lookOf(p) };
     });
   }
   guideMoments(l: Link): Moment[] {
-    return (l.marks || []).map((m, i) => ({ i, key: m.mid, at: m.at, civ: m.civ, strategyId: m.strategyId || null, elementId: m.elementId || null, age: m.age || null, note: m.note || '', shows: m.shows }))
+    return (l.marks || []).map((m, i) => ({ i, key: m.mid, at: m.at, civ: m.civ, strategyId: m.strategyId || null, elementId: m.elementId || null, age: m.age || null, note: m.note || '', shows: m.shows, ...lookOf(m) }))
       .sort((a, b) => (a.at == null ? 1e9 : a.at) - (b.at == null ? 1e9 : b.at) || a.i - b.i);
   }
-  momentName(mo: { strategyId: string | null; elementId: string | null; age: Age | null }): string {
+  momentName(mo: { strategyId: string | null; elementId: string | null; age: Age | null } & UseLook): string {
     if (mo.strategyId) return this.playTitle(mo.strategyId);
-    if (mo.elementId) return this.elName(mo.elementId) + (mo.age && this.elAges(mo.elementId).length > 1 ? ', ' + AGE_NAME[mo.age] + ' Age' : '');
+    if (mo.elementId) {
+      const note = this.useNote(mo.elementId, mo);
+      return this.elName(mo.elementId) + (note ? ' (' + note + ')' : '') + (mo.age && this.elAges(mo.elementId).length > 1 ? ', ' + AGE_NAME[mo.age] + ' Age' : '');
+    }
     return 'Not classified yet';
   }
 }

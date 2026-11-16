@@ -1,11 +1,14 @@
 // End-to-end run against `wrangler dev` with a local D1 (ALLOW_NO_AUTH=true).
 // Usage: node test/e2e.cjs [base url]
+// Load the subjects into the local D1 too (pnpm subjects sql); the phase 1
+// checks pick icons and set a landmark's intent. CHROME_PATH runs an
+// installed Chrome instead of Playwright's own browser.
 const { chromium } = require('playwright');
 const BASE = process.argv[2] || 'http://127.0.0.1:8787';
 const errors = [], results = [];
 const check = (name, ok, extra) => results.push((ok ? 'PASS ' : 'FAIL ') + name + (!ok && extra !== undefined ? ' :: ' + String(extra).replace(/\s+/g, ' ').slice(0, 600) : ''));
 (async () => {
-  const browser = await chromium.launch();
+  const browser = await chromium.launch(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {});
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark', acceptDownloads: true });
   await ctx.route(/fonts\.(googleapis|gstatic)/, (r) => r.abort());
   const page = await ctx.newPage();
@@ -226,6 +229,65 @@ const check = (name, ok, extra) => results.push((ok ? 'PASS ' : 'FAIL ') + name 
   const [dl] = await Promise.all([page.waitForEvent('download'), page.click('[data-act="up-export"]')]);
   check('download works', /matchup-library-.*\.json/.test(dl.suggestedFilename()), dl.suggestedFilename());
   await page.click('.close');
+
+  // Phase 1: type, icon and intent on an element, universal elements, landmarks
+  await page.goto(BASE + '/#library');
+  await W(500);
+  await page.click('[data-act="lib-seg"][data-v="elements"]');
+  await page.click('[data-act="df-open"][data-id="tower_rush"]');
+  await page.click('[data-act="df-type"][data-v="structure"]');
+  await page.click('[data-act="df-subject-pick"]');
+  await page.fill('#df-subject-q', 'outpost');
+  await page.click('[data-act="df-subject"][data-id="outpost"]');
+  await page.click('[data-act="df-intent"][data-v="offensive"]');
+  await page.click('[data-act="df-save"]');
+  await W();
+  st = await state();
+  const tr2 = st.defs.elements.find((e) => e.id === 'tower_rush');
+  check('element type, icon and intent in D1', tr2.kind === 'structure' && tr2.subject === 'outpost' && tr2.intent === 'offensive', JSON.stringify(tr2));
+  await page.click('[data-act="lib-back"]').catch(() => {});
+  await W(200);
+  check('split pill shows type, intent and icon', await page.$eval('[data-act="df-open"][data-id="tower_rush"] .spill',
+    (el) => el.dataset.type === 'structure' && el.dataset.intent === 'offensive' && !!el.querySelector('img[src$="outpost-1.png"]')));
+  await page.click('[data-act="df-open"][data-id="tower_rush"]');
+  await page.check('#df-universal');
+  await page.click('[data-act="ms-open"][data-key="cannot"]');
+  await page.check('.ms-list label.check:has-text("Mongols") input');
+  await page.click('[data-act="ms-open"][data-key="cannot"]');
+  await page.click('[data-act="df-save"]');
+  await W();
+  st = await state();
+  const tr3 = st.defs.elements.find((e) => e.id === 'tower_rush');
+  check('universal element and its exception in D1', tr3.universal === true && (tr3.cannot || []).join() === 'mongols', JSON.stringify(tr3));
+  await page.fill('#df-name', 'Tower rush, edited');
+  await page.click('[data-act="lib-back"]').catch(() => {});
+  await page.click('[data-act="df-open"][data-id="offensive_walls"]').catch(() => {});
+  await W(200);
+  check('unsaved edits are not dropped', (await page.inputValue('#df-name')) === 'Tower rush, edited');
+  await page.click('[data-act="df-revert"]');
+  await W(200);
+  await page.click('[data-act="lib-seg"][data-v="landmarks"]');
+  await page.selectOption('#lm-civ', 'holy_roman_empire');
+  await page.click('[data-act="lm-intent"][data-id="burgrave-palace"][data-v="offensive"]');
+  await W();
+  st = await state();
+  check('landmark default intent in D1', st.subjects['burgrave-palace'] && st.subjects['burgrave-palace'].defaultIntent === 'offensive', JSON.stringify(st.subjects['burgrave-palace']));
+  await page.click('[data-act="lib-seg"][data-v="strategies"]');
+  await page.click('[data-act="df-open"][data-id="barracks_into_tower_rush"]');
+  await page.click('[data-act="pb-intent"][data-i="1"]');
+  await page.click('[data-act="pb-intent"][data-i="1"]');
+  await page.click('[data-act="df-save"]');
+  await W();
+  st = await state();
+  const bt = st.defs.strategies.find((x) => x.id === 'barracks_into_tower_rush');
+  check('play step intent in D1', bt && bt.steps.some((x) => x.el === 'tower_rush' && x.intent === 'defensive'), JSON.stringify(bt));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.click('[data-act="lib-seg"][data-v="elements"]');
+  await page.click('[data-act="df-open"][data-id="spear_rush"]');
+  await W(200);
+  const panes = await page.$$eval('.lib > .pane', (ps) => ps.map((x) => x.getBoundingClientRect().width > 200));
+  check('three panes side by side on a wide screen', panes.length === 3 && panes.every(Boolean), JSON.stringify(panes));
+  await page.setViewportSize({ width: 390, height: 844 });
 
   // Overflow and console
   for (const vw of ['library', 'civs', 'maps', 'refs', 'check', 'civ-ottomans']) {

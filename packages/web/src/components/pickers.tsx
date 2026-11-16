@@ -1,11 +1,43 @@
 // Pickers used inside sheets: a dropdown checklist, a place picker, and the
 // step builder for plays and moments.
 import { Fragment, type ReactNode } from 'react';
-import { AGE_NAME, agesText, builderToSteps, isActive } from '@matchup-library/core';
+import { AGES, AGE_NAME, INTENT_NAME, agesText, builderToSteps, isActive, type Age, type BuilderRow } from '@matchup-library/core';
 import { L, S, emit, type DefSheet, type MomentSheet, type PlaceDraft } from '../store';
-import { addStep, cycleAge, elementGroups, setPlaceKind } from '../actions';
+import { addStep, cycleAge, cycleIntent, elementGroups, setPlaceKind } from '../actions';
 import { Icon } from './Icon';
 import { MapGroups, Seg } from './bits';
+import { SplitPill } from './Pill';
+
+// Landmarks you can age up with, grouped by civ. An age-up during an age is
+// built in that age: Dark builds the Feudal landmarks (aoe4world age 1).
+export function LandmarkOptions({ age }: { age?: Age | null }) {
+  const n = age ? AGES.indexOf(age) + 1 : 0;
+  const lms = L.subjects().filter((x) => x.kind === 'landmark' && x.active && (!n || x.age === n));
+  const civs = [...new Set(lms.map((x) => (x.civs || []).find((c) => L.civ(c)) || ''))].sort((a, b) => L.civName(a, a).localeCompare(L.civName(b, b)));
+  return (
+    <>
+      {civs.map((c) => (
+        <optgroup key={c || 'other'} label={c ? L.civName(c, c) : 'Other'}>
+          {lms.filter((x) => ((x.civs || []).find((y) => L.civ(y)) || '') === c).sort((a, b) => a.name.localeCompare(b.name)).map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+        </optgroup>
+      ))}
+    </>
+  );
+}
+
+// An age-up step can name its landmark.
+function StepLandmark({ b, i }: { b: BuilderRow; i: number }) {
+  if (L.elType(b.el) !== 'age_tech' || !L.subjects().some((x) => x.kind === 'landmark')) return null;
+  return (
+    <div className="step-sub">
+      <select className="select" data-act="pb-subject" data-i={i} aria-label={'Landmark for ' + L.elName(b.el)} value={b.subject || ''}
+        onChange={(e) => { if (e.target.value) b.subject = e.target.value; else delete b.subject; emit(); }}>
+        <option value="">{L.el(b.el)?.subject ? 'Its usual icon' : 'No landmark'}</option>
+        <LandmarkOptions age={b.age} />
+      </select>
+    </div>
+  );
+}
 
 export interface MsOption { value: string; label: string; short?: string; flag?: ReactNode; sub?: string; group?: string }
 
@@ -13,9 +45,10 @@ export interface MsOption { value: string; label: string; short?: string; flag?:
 export function MultiSelect({ msKey, label, options, selected, onToggle, none = 'None', hint }: {
   msKey: string; label: string; options: MsOption[]; selected: string[]; onToggle: (value: string, on: boolean) => void; none?: string; hint?: string;
 }) {
-  const open = !!S.sheet && S.sheet.open === msKey;
+  const host = S.sheet || S.panel;
+  const open = host.open === msKey;
   const chosen = options.filter((x) => selected.includes(x.value));
-  const toggleOpen = () => { if (!S.sheet) return; S.sheet.open = S.sheet.open === msKey ? null : msKey; emit(); };
+  const toggleOpen = () => { host.open = host.open === msKey ? null : msKey; emit(); };
   let last: string | undefined;
   return (
     <div className="field">
@@ -93,15 +126,21 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
   const rows = d.builder.map((b, i) => {
     const fixed = L.elAges(b.el).length === 1;
     const ageLabel = b.age ? AGE_NAME[b.age] : 'Any age';
+    const intentLabel = b.intent ? INTENT_NAME[b.intent] : 'Usual';
     return (
-      <div className="step" key={i + ':' + b.el}>
+      <Fragment key={i + ':' + b.el}>
+      <div className="step">
         {i > 0 && (
           <button type="button" className="join" data-act="pb-join" data-i={i} onClick={() => { b.join = !b.join; emit(); }}
             aria-label={b.join ? 'Happens with the element above. Tap to make it come after' : 'Comes after the element above. Tap to make it happen at the same time'}>
             <span>{b.join ? 'with' : 'then'}</span>
           </button>
         )}
-        <span className="name">{L.elName(b.el)}</span>
+        <span className="name pillname"><SplitPill el={b.el} use={b} /></span>
+        <button type="button" className="pill-btn age" data-act="pb-intent" data-i={i} onClick={() => { cycleIntent(b); emit(); }}
+          aria-label={'Intent: ' + intentLabel + '. Tap to change'}>
+          <span className={'pill' + (b.intent ? '' : ' ghost')}>{intentLabel}</span>
+        </button>
         <button type="button" className="pill-btn age" data-act="pb-age" data-i={i} disabled={fixed} onClick={() => { cycleAge(b); emit(); }}
           aria-label={fixed ? 'Always ' + ageLabel + ' Age' : 'Age: ' + ageLabel + '. Tap to change'}>
           <span className={'pill' + (fixed ? ' plain' : b.age ? '' : ' ghost')}>{ageLabel}</span>
@@ -110,6 +149,8 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
           <Icon name="x" size={16} w={2} />
         </button>
       </div>
+      <StepLandmark b={b} i={i} />
+      </Fragment>
     );
   });
   const picker = sh.picking && (
@@ -119,7 +160,7 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
           <span className="label">{g.name}</span>
           {g.items.map((e) => (
             <button key={e.id} type="button" className="item" data-act="pb-add" data-id={e.id} onClick={() => { addStep(d.builder, e.id); sh.picking = false; emit(); }}>
-              <span className="fw5">{e.name}</span><span className="sublabel">{agesText(L.elAges(e.id))}</span>
+              <SplitPill el={e.id} /><span className="sublabel">{agesText(L.elAges(e.id))}</span>
             </button>
           ))}
         </div>

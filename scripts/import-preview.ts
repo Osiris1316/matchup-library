@@ -29,6 +29,9 @@ answers.filter(([, a]) => a.target !== 'play').forEach(([id, d]) => writes.push(
 answers.filter(([, a]) => a.target === 'play').forEach(([id, d]) => writes.push({ path: 'answers/' + id, data: d }));
 Object.entries(ex.games || {}).forEach(([id, d]) => writes.push({ path: 'games/' + id, data: d }));
 Object.entries(ex.links || {}).forEach(([id, d]) => writes.push({ path: 'links/' + id, data: d }));
+// Default intents set on landmarks and other subjects. The subjects themselves
+// come from scripts/subjects.ts, so load those first.
+Object.entries(ex.subjects || {}).filter(([, x]) => x && x.defaultIntent).forEach(([id, d]) => writes.push({ path: 'subjects/' + id, data: d }));
 
 const lines: string[] = [];
 writes.forEach((w) => docStatements(w.path, w.data, null).A.forEach((s) => lines.push(inlineSql(s) + ';')));

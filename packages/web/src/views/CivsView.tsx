@@ -1,10 +1,11 @@
 // Civs, and one civ's page with its tags.
-import { byName, guideTitle, isActive, placeKey, plural, tagField, tagTargetId, type Civ, type ItemKind, type TagWithId } from '@matchup-library/core';
+import { byName, guideTitle, isActive, lookOf, placeKey, plural, tagField, tagTargetId, type Civ, type ItemKind, type TagWithId, type UseLook } from '@matchup-library/core';
 import { L, S, civIdFromView, civSlug, emit, savePrefs } from '../store';
 import { copyFromParent, openBulk, openDef, openTagSheet, restoreTag, toggleDefActive } from '../actions';
 import { Flag, hasFlag } from '../components/Flag';
 import { Icon } from '../components/Icon';
 import { NewButton, PageHead, RetiredToggle, UpkeepLink } from '../components/bits';
+import { SplitPill, StepPills } from '../components/Pill';
 
 export function CivsView() {
   const u = S.ui.civs;
@@ -60,7 +61,8 @@ export function CivView() {
     return (
       <div key={t.id} className={'lrow' + (gone ? ' retired' : '')}>
         <button type="button" className="main-btn" data-act="cv-tag" data-id={t.id} onClick={() => openTagSheet({ tagId: t.id })}>
-          <span className="t">{L.tagTargetName(t)}{age && <span className="muted fw5"> · {age}</span>}{gone && <span className="muted fw5"> ({t.play ? 'play' : 'element'} retired)</span>}</span>
+          <span className="t">{t.el ? <SplitPill el={t.el} use={t} /> : L.tagTargetName(t)}{age && <span className="muted fw5"> · {age}</span>}{gone && <span className="muted fw5"> ({t.play ? 'play' : 'element'} retired)</span>}</span>
+          {t.play && L.strat(t.play) && <StepPills steps={(L.strat(t.play) as NonNullable<ReturnType<typeof L.strat>>).steps} mini />}
           <span className="s">{L.placeLabel(t.place)}{d ? ' · ' + d : ''}</span>
         </button>
       </div>
@@ -68,13 +70,13 @@ export function CivView() {
   };
   // Seen in a game or guide, but not tagged yet.
   const taggedKeys = new Set(active.map((t) => tagField(t) + ':' + tagTargetId(t)));
-  const seen = new Map<string, { field: ItemKind; id: string; text: string }>();
-  const note = (field: ItemKind, id: string | null | undefined, text: string) => {
+  const seen = new Map<string, { field: ItemKind; id: string; text: string; use: UseLook }>();
+  const note = (field: ItemKind, id: string | null | undefined, text: string, use: UseLook) => {
     const k = field + ':' + id;
-    if (id && !taggedKeys.has(k) && !seen.has(k)) seen.set(k, { field, id, text });
+    if (id && !taggedKeys.has(k) && !seen.has(k)) seen.set(k, { field, id, text, use });
   };
-  L.gamePlays(cid, { kind: 'any' }).forEach((x) => note(x.p.strategyId ? 'play' : 'el', x.p.strategyId || x.p.elementId, L.gameReason(x.g)));
-  L.guideMarks(cid, { kind: 'any' }).forEach((x) => note(x.m.strategyId ? 'play' : 'el', x.m.strategyId || x.m.elementId, 'Shown in a guide: ' + guideTitle(x.l)));
+  L.gamePlays(cid, { kind: 'any' }).forEach((x) => note(x.p.strategyId ? 'play' : 'el', x.p.strategyId || x.p.elementId, L.gameReason(x.g), lookOf(x.p)));
+  L.guideMarks(cid, { kind: 'any' }).forEach((x) => note(x.m.strategyId ? 'play' : 'el', x.m.strategyId || x.m.elementId, 'Shown in a guide: ' + guideTitle(x.l), lookOf(x.m)));
   const parent = c.parent ? L.civ(c.parent) : null;
   const parentTags = parent ? L.activeTags().filter((t) => t.civ === parent.id) : [];
   const u = S.ui.civ;
@@ -106,7 +108,7 @@ export function CivView() {
               {[...seen.values()].map((x) => (
                 <div key={x.field + ':' + x.id} className="lrow">
                   <button type="button" className="main-btn" data-act="cv-tag-new" data-field={x.field} data-id={x.id} onClick={() => openTagSheet({ civ: cid, field: x.field, id: x.id, place: { kind: 'any' } })}>
-                    <span className="t">{x.field === 'play' ? L.playTitle(x.id) : L.elName(x.id)}</span><span className="s">{x.text}</span>
+                    <span className="t">{x.field === 'play' ? L.playTitle(x.id) : <SplitPill el={x.id} use={x.use} />}</span><span className="s">{x.text}</span>
                   </button>
                   <span className="pill plain" aria-hidden="true">Tag</span>
                 </div>
@@ -125,7 +127,7 @@ export function CivView() {
             ? <div className="list">
                 {retired.sort(sortT).map((t) => (
                   <div key={t.id} className="lrow retired">
-                    <span className="main-btn static"><span className="t">{L.tagTargetName(t)}{L.tagAgeText(t) ? ' · ' + L.tagAgeText(t) : ''}</span><span className="s">{L.placeLabel(t.place)}</span></span>
+                    <span className="main-btn static"><span className="t">{t.el ? <SplitPill el={t.el} use={t} /> : L.tagTargetName(t)}{L.tagAgeText(t) ? ' · ' + L.tagAgeText(t) : ''}</span><span className="s">{L.placeLabel(t.place)}</span></span>
                     <button type="button" className="pill-btn" data-act="cv-restore" data-id={t.id} aria-label={'Restore the ' + L.tagTargetName(t) + ' tag'} onClick={() => restoreTag(t.id)}><span className="pill">Restore</span></button>
                   </div>
                 ))}

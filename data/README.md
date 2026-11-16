@@ -2,11 +2,7 @@
 
 Library data goes here and stays out of git (see `.gitignore`), because the repo is public.
 
-- `preview-snapshot-2026-11-10.json`: the preview's data as of November 10, 2026.
-- `import-2026-11-10.sql`: that snapshot converted to SQL for D1.
-
-For your latest data, download a fresh copy from the preview (Upkeep, then Download a copy), save it here, and convert it:
-
-```powershell
-pnpm import-preview data\preview-download.json data\import.sql
-```
+- Downloads from the site (Upkeep, then Download a copy), and the SQL made from them with `pnpm import-preview`.
+- `subjects.sql`, written by `pnpm subjects sql` from the aoe4world data repo.
+- `phase1-elements.sql`, written by `pnpm phase1-elements <download.json>`: the one-off step that moves the elements onto types, icons and intent.
+- Backups from `npx wrangler d1 export matchup-library --remote --output data\backup-<date>.sql`.

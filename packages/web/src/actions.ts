@@ -1,9 +1,9 @@
 // What the buttons do: open sheets with drafts, and turn saved drafts into
 // record writes. Each save is one commit, so it can be undone in one step.
 import {
-  AGES, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, newId, newTag, normalizeUrl, openAtFrom,
-  parsePlace, parseTime, placeKey, plural, safeUrl, slug, stepsToBuilder, tagField, tagKey, tagKeyOf, tagTargetId, timed,
-  fmtTime, type Age, type BuilderRow, type DefType, type DocWrite, type Element, type Game, type GamePlay, type ItemKind,
+  AGES, EL_TYPES, EL_TYPE_GROUP, INTENT_NAME, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, lookOf, newId, newTag, normalizeUrl, openAtFrom,
+  parsePlace, parseTime, placeKey, plural, safeUrl, slug, stable, stepsToBuilder, tagField, tagKey, tagKeyOf, tagTargetId, timed,
+  fmtTime, type Age, type BuilderRow, type DefType, type DocWrite, type Element, type Game, type GamePlay, type Intent, type ItemKind,
   type Link, type Mark, type Place, type Strategy, type Tag
 } from '@matchup-library/core';
 import { commit } from './api/client';
@@ -46,13 +46,13 @@ export function openTagSheet(opts: TagOpen, back?: Sheet | null): void {
   if ('tagId' in opts) {
     const t = S.data.tags[opts.tagId];
     if (!t) return;
-    openSheet({ kind: 'tag', back: back || null, draft: { tagId: opts.tagId, civ: t.civ, field: tagField(t), target: tagTargetId(t), place: draftOf(t.place), age: t.age || null, timing: t.timing || '', tells: t.tells || '', notes: t.notes || '' } });
+    openSheet({ kind: 'tag', back: back || null, draft: { tagId: opts.tagId, civ: t.civ, field: tagField(t), target: tagTargetId(t), place: draftOf(t.place), age: t.age || null, timing: t.timing || '', tells: t.tells || '', notes: t.notes || '', intent: t.intent || '', subject: t.subject || '' } });
     return;
   }
   const place: PlaceDraft = opts.place.kind !== 'any' && opts.place.id ? { kind: opts.place.kind, id: opts.place.id } : { kind: 'any', id: null };
   const same = L.activeTags().find((t) => tagKey(t) === tagKeyOf(opts.civ, opts.field, opts.id, null, toPlace(place) || { kind: 'any' }));
   if (same) { openTagSheet({ tagId: same.id }, back); return; }
-  openSheet({ kind: 'tag', back: back || null, draft: { tagId: null, civ: opts.civ, field: opts.field, target: opts.id, place, age: null, timing: '', tells: '', notes: '' } });
+  openSheet({ kind: 'tag', back: back || null, draft: { tagId: null, civ: opts.civ, field: opts.field, target: opts.id, place, age: null, timing: '', tells: '', notes: '', intent: '', subject: '' } });
 }
 
 export async function saveTag(): Promise<void> {
@@ -62,7 +62,8 @@ export async function saveTag(): Promise<void> {
   const place = toPlace(d.place);
   if (!place) { showToast('Pick where it applies first.', true); return; }
   const age = d.field === 'el' ? d.age || null : null;
-  const myKey = tagKeyOf(d.civ, d.field, d.target, age, place);
+  const look = d.field === 'el' ? lookOf({ intent: d.intent || null, subject: d.subject || null }) : {};
+  const myKey = tagKeyOf(d.civ, d.field, d.target, age, place, look.intent || null);
   const same = L.allTags().find((t) => t.id !== d.tagId && tagKey(t) === myKey);
   const fields = { timing: d.timing.trim(), tells: d.tells.trim(), notes: d.notes.trim() };
   const name = d.field === 'el' ? L.elName(d.target) : L.playTitle(d.target);
@@ -74,8 +75,10 @@ export async function saveTag(): Promise<void> {
     if (d.tagId) writes.push({ path: 'tags/' + d.tagId, data: { ...clone(S.data.tags[d.tagId] as Tag), active: false } });
   } else {
     const prev = d.tagId ? S.data.tags[d.tagId] : null;
-    const base = prev ? clone(prev) : newTag(d.civ, d.field, d.target, place);
-    writes.push({ path: 'tags/' + (d.tagId || newId()), data: { ...base, place, age, ...fields, active: true } });
+    const base: Tag = prev ? clone(prev) : newTag(d.civ, d.field, d.target, place);
+    delete base.intent;
+    delete base.subject;
+    writes.push({ path: 'tags/' + (d.tagId || newId()), data: { ...base, place, age, ...look, ...fields, active: true } });
   }
   S.sheet = sh.back || null;
   await commit(d.tagId ? 'Edited the ' + L.civName(d.civ) + ' ' + name + ' tag' : 'Tagged ' + L.civName(d.civ) + ' with ' + name + ' ' + L.placePhrase(place), writes,
@@ -139,7 +142,7 @@ export async function copyFromParent(cid: string): Promise<void> {
       writes.push({ path: 'tags/' + twin.id, data: { ...clone(old), active: true, timing: old.timing || t.timing || '', tells: old.tells || t.tells || '', notes: old.notes || t.notes || '' } });
       return;
     }
-    writes.push({ path: 'tags/' + newId(), data: { ...newTag(cid, tagField(t), tagTargetId(t), t.place), age: t.age || null, timing: t.timing || '', tells: t.tells || '', notes: t.notes || '', copiedFrom: t.id } });
+    writes.push({ path: 'tags/' + newId(), data: { ...newTag(cid, tagField(t), tagTargetId(t), t.place), age: t.age || null, ...lookOf(t), timing: t.timing || '', tells: t.tells || '', notes: t.notes || '', copiedFrom: t.id } });
   });
   if (!writes.length) { showToast('Nothing new to copy.', true); return; }
   S.sheet = null;
@@ -151,16 +154,71 @@ export async function copyFromParent(cid: string): Promise<void> {
 // ---------------------------------------------------------------------------
 const civOnFor = (field: ItemKind, id: string): string[] => [...new Set(L.activeTags().filter((t) => t[field] === id && placeKey(t.place) === 'any:').map((t) => t.civ))];
 function blankDraft(): DefDraft {
-  return { name: '', description: '', kind: '', ages: AGES.slice(), tells: '', builder: [], where: [], whereNote: '', civOn: [], mapsOn: [], type: '', features: [], inPool: true, notes: '', short: '', parent: '' };
+  return { name: '', description: '', kind: '', ages: AGES.slice(), tells: '', subject: '', intent: '', universal: false, cannot: [],
+    builder: [], where: [], whereNote: '', civOn: [], mapsOn: [], type: '', features: [], inPool: true, notes: '', short: '', parent: '' };
 }
+function elementDraft(id: string | null): DefDraft {
+  const d = blankDraft();
+  const it = S.data.defs.elements.find((x) => x.id === id);
+  if (it) {
+    Object.assign(d, { name: it.name, kind: it.kind || '', ages: L.elAges(it.id).slice(), description: it.description || '', tells: it.tells || '', where: clone(it.where || []), whereNote: it.whereNote || '',
+      civOn: civOnFor('el', it.id), subject: it.subject || '', intent: it.intent || '', universal: !!it.universal, cannot: (it.cannot || []).slice() });
+  } else d.kind = 'unit';
+  return d;
+}
+
+// ---------------------------------------------------------------------------
+// The Library's element editor: one element open beside the list, not in a sheet.
+// ---------------------------------------------------------------------------
+export const elementDirty = (): boolean => {
+  const u = S.ui.library;
+  return !!u.draft && stable(u.draft) !== u.saved;
+};
+export function openElement(id: string | null, force = false): void {
+  const u = S.ui.library;
+  if (!force && elementDirty() && (id || 'new') !== u.sel) {
+    showToast('Save or revert the changes to ' + (u.draft && u.draft.name.trim() || 'this element') + ' first.', true);
+    return;
+  }
+  const it = id ? S.data.defs.elements.find((x) => x.id === id) : null;
+  u.sel = it ? it.id : 'new';
+  u.draft = elementDraft(it ? it.id : null);
+  u.saved = stable(u.draft);
+  u.subjectPick = !it;
+  S.panel.open = null;
+  emit();
+  if (window.innerWidth < 1100) window.scrollTo(0, 0);
+}
+export function closeElement(): void {
+  if (elementDirty()) { showToast('Save or revert your changes first.', true); return; }
+  const u = S.ui.library;
+  u.sel = ''; u.draft = null; u.saved = ''; S.panel.open = null;
+  emit();
+}
+export function revertElement(): void {
+  const u = S.ui.library;
+  if (u.sel === 'new') { u.sel = ''; u.draft = null; u.saved = ''; emit(); return; }
+  openElement(u.sel, true);
+}
+export async function saveElement(): Promise<void> {
+  const u = S.ui.library;
+  if (!u.draft) return;
+  const id = await saveDefDraft('elements', u.sel === 'new' ? null : u.sel, u.draft, () => {});
+  if (id) openElement(id, true);
+}
+
+// A subject's default intent, set from the Library's landmark list.
+export async function setSubjectIntent(id: string, intent: Intent | null): Promise<void> {
+  const x = S.data.subjects && S.data.subjects[id];
+  if (!x || (x.defaultIntent || null) === intent) return;
+  await commit('Set ' + x.name + ' to ' + (intent ? INTENT_NAME[intent].toLowerCase() : 'no intent'), [{ path: 'subjects/' + id, data: { ...clone(x), defaultIntent: intent } }]);
+}
+
 export function openDef(type: DefType, id: string | null): void {
+  if (type === 'elements') { openElement(id); return; }
   const d = blankDraft();
   const D = S.data.defs;
-  if (type === 'elements') {
-    const it = D.elements.find((x) => x.id === id);
-    if (it) Object.assign(d, { name: it.name, kind: it.kind || '', ages: L.elAges(it.id).slice(), description: it.description || '', tells: it.tells || '', where: clone(it.where || []), whereNote: it.whereNote || '', civOn: civOnFor('el', it.id) });
-    else d.kind = (D.kinds.find(isActive) || { id: '' }).id;
-  } else if (type === 'strategies') {
+  if (type === 'strategies') {
     const it = D.strategies.find((x) => x.id === id);
     if (it) Object.assign(d, { name: it.name, description: it.description || '', builder: stepsToBuilder(it.steps), where: clone(it.where || []), whereNote: it.whereNote || '', civOn: civOnFor('play', it.id) });
   } else if (type === 'features') {
@@ -205,14 +263,19 @@ function civTagWrites(field: ItemKind, id: string, civOn: string[]): { writes: D
 export async function saveDef(): Promise<void> {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'def') return;
-  const d = sh.draft, t = sh.type;
+  await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = null; });
+}
+
+// Saves a definition draft as one commit. Returns the saved id, or null if
+// the draft wasn't ready. close() runs just before the commit.
+async function saveDefDraft(t: DefType, origId: string | null, d: DefDraft, close: () => void): Promise<string | null> {
   const word = DEF_WORD[t];
   const name = (d.name || '').trim();
-  if (!name) { showToast('Give it a name first.', true); return; }
+  if (!name) { showToast('Give it a name first.', true); return null; }
   const items = clone(listOf(t)) as (Item & Record<string, unknown>)[];
-  const dup = items.find((x) => x.id !== sh.id && x.name.toLowerCase() === name.toLowerCase());
-  if (dup) { showToast(isActive(dup) ? 'There is already a ' + word + ' with that name.' : 'A retired ' + word + ' has that name. Restore it instead.', true); return; }
-  let id = sh.id;
+  const dup = items.find((x) => x.id !== origId && x.name.toLowerCase() === name.toLowerCase());
+  if (dup) { showToast(isActive(dup) ? 'There is already a ' + word + ' with that name.' : 'A retired ' + word + ' has that name. Restore it instead.', true); return null; }
+  let id = origId;
   if (!id) {
     const sep = t === 'maps' ? '-' : '_';
     const base = t === 'maps' ? slug(name).replace(/_/g, '-') : slug(name);
@@ -220,19 +283,21 @@ export async function saveDef(): Promise<void> {
     while (items.some((x) => x.id === next)) { next = base + sep + n; n += 1; }
     id = next;
   }
-  const prev = sh.id ? findDef(t, sh.id) : null;
+  const prev = origId ? findDef(t, origId) : null;
   const item: Item & Record<string, unknown> = prev ? clone(prev) : { id, name, active: true };
   item.name = name;
   const extra: DocWrite[] = [];
   let tagNote = '';
   if (t === 'elements' || t === 'strategies') {
-    if (t === 'elements') Object.assign(item, { kind: d.kind, ages: AGES.filter((a) => d.ages.includes(a)), description: d.description.trim(), tells: d.tells.trim() });
-    else {
+    if (t === 'elements') {
+      Object.assign(item, { kind: d.kind, ages: AGES.filter((a) => d.ages.includes(a)), description: d.description.trim(), tells: d.tells.trim(),
+        subject: d.subject || null, intent: d.intent || null, universal: !!d.universal, cannot: d.universal ? d.cannot.slice().sort() : [] });
+    } else {
       const steps = builderToSteps(d.builder);
-      if (!steps.length) { showToast('Add at least one element to the play.', true); return; }
+      if (!steps.length) { showToast('Add at least one element to the play.', true); return null; }
       const sig = L.signature(steps);
-      const twin = S.data.defs.strategies.find((s) => s.id !== sh.id && isActive(s) && L.signature(s.steps) === sig);
-      if (twin) { showToast('Same steps as ' + twin.name + '. Edit that play instead, or change the steps.', true); return; }
+      const twin = S.data.defs.strategies.find((s) => s.id !== origId && isActive(s) && L.signature(s.steps) === sig);
+      if (twin) { showToast('Same steps as ' + twin.name + '. Edit that play instead, or change the steps.', true); return null; }
       const p = prev as Strategy | null;
       const oldNotes: Record<string, string> = {};
       (p ? p.steps : []).forEach((s) => { oldNotes[s.el + '@' + s.step] = s.notes; });
@@ -240,7 +305,8 @@ export async function saveDef(): Promise<void> {
     }
     item.where = d.where;
     item.whereNote = d.where.length ? d.whereNote.trim() : '';
-    const r = civTagWrites(t === 'elements' ? 'el' : 'play', id, d.civOn);
+    // A universal element is implied for every civ, so its civ list isn't edited here.
+    const r = t === 'elements' && d.universal ? { writes: [], on: 0, off: 0 } : civTagWrites(t === 'elements' ? 'el' : 'play', id, d.civOn);
     extra.push(...r.writes);
     if (r.on || r.off) tagNote = ' ' + [r.on ? 'Tagged ' + plural(r.on, 'civ') : '', r.off ? (r.on ? 'untagged ' : 'Untagged ') + plural(r.off, 'civ') : ''].filter(Boolean).join(', ') + '.';
   } else if (t === 'features') {
@@ -262,8 +328,9 @@ export async function saveDef(): Promise<void> {
     item.description = d.description.trim();
   }
   const next = prev ? items.map((x) => (x.id === id ? item : x)) : [...items, item];
-  S.sheet = null;
+  close();
   await commit((prev ? 'Edited ' : 'Added ') + name, [{ path: 'defs/' + t, data: { items: next } }, ...extra], (prev ? 'Saved ' : 'Added ') + name + '.' + tagNote);
+  return id;
 }
 
 export async function toggleDefActive(type: DefType, id: string): Promise<void> {
@@ -275,11 +342,11 @@ export async function toggleDefActive(type: DefType, id: string): Promise<void> 
   await commit((on ? 'Restored ' : 'Retired ') + it.name, [{ path: 'defs/' + type, data: { items } }], on ? null : 'Retired ' + it.name + '. Show retired to bring it back.');
 }
 
-// The element list for "Add element": active elements, grouped by kind.
+// The element list for "Add element": active elements, grouped by type.
 export function elementGroups(): { name: string; items: Element[] }[] {
   const els = S.data.defs.elements.filter(isActive);
-  const groups = S.data.defs.kinds.filter(isActive).map((k) => ({ name: k.name, items: els.filter((e) => e.kind === k.id) }));
-  groups.push({ name: 'Other', items: els.filter((e) => !isActive(L.kind(e.kind))) });
+  const groups = EL_TYPES.map((ty) => ({ name: EL_TYPE_GROUP[ty], items: els.filter((e) => e.kind === ty) }));
+  groups.push({ name: 'No type yet', items: els.filter((e) => !L.elType(e.id)) });
   return groups.filter((g) => g.items.length).map((g) => ({ ...g, items: g.items.slice().sort((a, b) => a.name.localeCompare(b.name)) }));
 }
 export function addStep(builder: BuilderRow[], elId: string): void {
@@ -288,6 +355,12 @@ export function addStep(builder: BuilderRow[], elId: string): void {
   let age: Age | null = null;
   if (ages.length === 1) age = ages[0] as Age; else if (prev && prev.age && ages.includes(prev.age)) age = prev.age;
   builder.push({ el: elId, age, join: false });
+}
+// A step's intent: the element's default, then each override in turn.
+export function cycleIntent(row: BuilderRow): void {
+  const opts: (Intent | null)[] = [null, 'offensive', 'defensive', 'economic'];
+  const next = opts[(opts.indexOf(row.intent || null) + 1) % opts.length] ?? null;
+  if (next) row.intent = next; else delete row.intent;
 }
 export function cycleAge(row: BuilderRow): void {
   const opts: (Age | null)[] = [null, ...L.elAges(row.el)];
@@ -402,10 +475,10 @@ export async function deleteRef(): Promise<void> {
 // ---------------------------------------------------------------------------
 // Moments: what happened in a game or guide, and when
 // ---------------------------------------------------------------------------
-function targetBuilder(x: { strategyId?: string | null; elementId?: string | null; age?: Age | null }): BuilderRow[] {
+function targetBuilder(x: { strategyId?: string | null; elementId?: string | null; age?: Age | null; intent?: Intent | null; subject?: string | null }): BuilderRow[] {
   const s = x.strategyId ? L.strat(x.strategyId) : null;
   if (s) return stepsToBuilder(s.steps);
-  if (x.elementId) return [{ el: x.elementId, age: x.age || null, join: false }];
+  if (x.elementId) return [{ el: x.elementId, age: x.age || null, join: false, ...lookOf(x) }];
   return [];
 }
 function blankMoment(d: Pick<MomentDraft, 'refKind' | 'gameId' | 'linkId' | 'side' | 'civ' | 'shows'>): MomentDraft {
@@ -443,8 +516,8 @@ export async function saveMoment(again: boolean): Promise<void> {
   const at = atText ? parseTime(atText) : null;
   if (atText && at == null) { showToast('Write the time like 2:30, or leave it empty.', true); return; }
   const items = clone(S.data.defs.strategies);
-  let tgt: { strategyId: string | null; elementId: string | null; age: Age | null; created?: boolean; name?: string };
-  if (steps.length === 1) tgt = { elementId: first.el, age: first.age || null, strategyId: null };
+  let tgt: { strategyId: string | null; elementId: string | null; age: Age | null; created?: boolean; name?: string; intent?: Intent | null; subject?: string | null };
+  if (steps.length === 1) tgt = { elementId: first.el, age: first.age || null, strategyId: null, ...lookOf(first) };
   else {
     const nm = (d.name || '').trim();
     if (!L.matchPlay(d.builder, d.origStrategy) && nm && items.some((x) => x.name.toLowerCase() === nm.toLowerCase())) { showToast('A different play already has that name. Pick another.', true); return; }
@@ -461,8 +534,10 @@ export async function saveMoment(again: boolean): Promise<void> {
     g.plays = g.plays || [];
     const pid = d.pid || newId();
     const i = g.plays.findIndex((p) => p.pid === pid);
-    const old: Partial<GamePlay> = i >= 0 ? (g.plays[i] as GamePlay) : {};
-    const play: GamePlay = { ...old, pid, runBy: d.side, strategyId: tgt.strategyId, elementId: tgt.elementId, age: tgt.age, outcome: d.outcome || null,
+    const old: Partial<GamePlay> = i >= 0 ? { ...(g.plays[i] as GamePlay) } : {};
+    delete old.intent;
+    delete old.subject;
+    const play: GamePlay = { ...old, ...lookOf(tgt), pid, runBy: d.side, strategyId: tgt.strategyId, elementId: tgt.elementId, age: tgt.age, outcome: d.outcome || null,
       prep: g.mine && d.side === 'opponent' ? d.prep || null : null, answerId: old.answerId || null, did: (d.did || '').trim(), notes: (d.note || '').trim() };
     if (i >= 0) g.plays[i] = play; else g.plays.push(play);
     writes.push({ path: 'games/' + gameId, data: g });
@@ -483,7 +558,7 @@ export async function saveMoment(again: boolean): Promise<void> {
     title = guideTitle(lk);
     lk.marks = lk.marks || [];
     const mid = d.mid || newId();
-    const mark: Mark = { mid, at, playId: null, civ: d.civ || null, elementId: tgt.elementId, strategyId: tgt.strategyId, age: tgt.age, shows: d.shows || 'threat', note: (d.note || '').trim() };
+    const mark: Mark = { mid, at, playId: null, civ: d.civ || null, elementId: tgt.elementId, strategyId: tgt.strategyId, age: tgt.age, shows: d.shows || 'threat', note: (d.note || '').trim(), ...lookOf(tgt) };
     const i = lk.marks.findIndex((m) => m.mid === mid);
     if (i >= 0) lk.marks[i] = mark; else lk.marks.push(mark);
     writes.push({ path: 'links/' + linkId, data: lk });

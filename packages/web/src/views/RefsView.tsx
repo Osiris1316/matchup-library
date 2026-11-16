@@ -1,12 +1,13 @@
 // References: the list, and one game or guide with its moments.
 import {
-  SOURCE_NAME, SOURCE_SHORT, fmtDate, fmtTime, guideTitle, linkHint, plural, safeUrl, timed, type Game, type Moment
+  AGE_NAME, SOURCE_NAME, SOURCE_SHORT, fmtDate, fmtTime, guideTitle, linkHint, plural, safeUrl, timed, type Game, type Moment
 } from '@matchup-library/core';
 import { L, S, emit, type RefKind } from '../store';
 import { openMoment, openRefDetails, refFromView } from '../actions';
 import { Flag, FlagOr, hasFlag } from '../components/Flag';
 import { Icon } from '../components/Icon';
 import { PageHead, Seg, UpkeepLink } from '../components/bits';
+import { SplitPill } from '../components/Pill';
 
 export const REF_KIND: Record<RefKind, string> = { mine: 'My game', game: 'Other game', guide: 'Guide' };
 export const OUTCOME = { worked: 'Worked', mixed: 'Mixed', failed: 'Failed' } as const;
@@ -108,7 +109,7 @@ export function RefView() {
                     {anyTime && <span className="time">{mo.at != null ? fmtTime(mo.at) : ''}</span>}
                     <span className="lead-flag">{mo.civ && <FlagOr id={mo.civ} />}</span>
                     <button type="button" className="main-btn" data-act="mo-open" data-key={mo.key} onClick={() => openMoment(mo.key)}>
-                      <span className="t">{L.momentName(mo)}</span>
+                      <span className="t">{mo.elementId && !mo.strategyId ? <><SplitPill el={mo.elementId} use={mo} />{mo.age && L.elAges(mo.elementId).length > 1 ? <span className="muted fw5"> · {AGE_NAME[mo.age]} Age</span> : null}</> : L.momentName(mo)}</span>
                       <span className="s">{[L.civName(mo.civ, isGame ? 'Side not set' : 'Not one civ'), mo.outcome ? OUTCOME[mo.outcome] : '', mo.note].filter(Boolean).join(' · ')}</span>
                     </button>
                   </div>

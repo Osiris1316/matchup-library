@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
 import { BadRequest, DEF_TYPES, STATE_QUERIES, buildState, docStatements, inlineSql, parsePath, planCommit, type StateRows } from '../src';
@@ -14,7 +14,7 @@ describe('paths', () => {
 
 describe('definition lists', () => {
   it('writes only changed items, and deletes removed ones last', () => {
-    const before = { items: fixture().defs.kinds.concat([{ id: 'army', name: 'Army', description: '', active: true }]) };
+    const before = { items: [{ id: 'structure', name: 'Structure', description: '', active: true }, { id: 'army', name: 'Army', description: '', active: true }] };
     const after = { items: [{ id: 'structure', name: 'Buildings', description: '', active: true }] };
     const r = docStatements('defs/kinds', after, before);
     expect(r.A).toHaveLength(1);
@@ -43,6 +43,12 @@ describe('commits', () => {
   it('refuses an empty save', () => {
     expect(() => planCommit({ writes: [] })).toThrow(BadRequest);
   });
+  it('saves only a subject\'s default intent, and never removes one', () => {
+    const r = docStatements('subjects/burgrave-palace', { ...fixture().subjects!['burgrave-palace']!, defaultIntent: 'economic' }, null);
+    expect(r.A.map((s) => s.sql.split(' ').slice(0, 3).join(' '))).toEqual(['UPDATE subjects SET']);
+    expect(r.A[0]!.params[0]).toBe('economic');
+    expect(() => docStatements('subjects/burgrave-palace', null, null)).toThrow(BadRequest);
+  });
   it('writes SQL text with quotes escaped', () => {
     expect(inlineSql({ sql: 'SELECT ?, ?, ?', params: ["It's", 3, null] })).toBe("SELECT 'It''s', 3, NULL");
   });
@@ -57,8 +63,13 @@ try { DatabaseSync = (createRequire(import.meta.url)('node:sqlite') as { Databas
 describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
   it('reads back what it wrote', () => {
     const db = new (DatabaseSync as new (path: string) => Db)(':memory:');
-    db.exec(readFileSync(new URL('../src/db/migrations/0001_initial_schema.sql', import.meta.url), 'utf8'));
+    const dir = new URL('../src/db/migrations/', import.meta.url);
+    readdirSync(dir).filter((f) => f.endsWith('.sql')).sort().forEach((f) => db.exec(readFileSync(new URL(f, dir), 'utf8')));
+    db.exec('PRAGMA foreign_keys = ON');
     const ex = fixture();
+    // Subjects come from the seed script, not from the page.
+    Object.values(ex.subjects || {}).forEach((x) => db.prepare('INSERT INTO subjects (id, name, kind, min_age, civs, icon, default_intent, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
+      .run(x.id, x.name, x.kind, x.age, x.civs ? JSON.stringify(x.civs) : null, x.icon, x.defaultIntent));
     const writes: { path: string; data: unknown }[] = [];
     DEF_TYPES.forEach((t) => writes.push({ path: 'defs/' + t, data: { items: ex.defs[t] } }));
     writes.push({ path: 'meta/settings', data: ex.settings });
@@ -71,6 +82,7 @@ describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
     STATE_QUERIES.forEach(([key, sql]) => { rows[key] = db.prepare(sql).all(); });
     const st = buildState(rows);
     expect(st.defs).toEqual(ex.defs);
+    expect(st.subjects).toEqual(ex.subjects);
     expect(st.settings).toEqual(ex.settings);
     const strip = <T extends object>(o: Record<string, T>) => Object.fromEntries(Object.entries(o).map(([k, v]) => [k, { ...v, createdAt: undefined }]));
     expect(strip(st.tags)).toEqual(strip(ex.tags));

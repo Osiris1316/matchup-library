@@ -4,6 +4,7 @@ import { L, S, civSlug, type WhySheet as WhySheetT } from '../store';
 import { openTagSheet, whyNewTag } from '../actions';
 import { Flag } from '../components/Flag';
 import { CloseBtn } from '../components/bits';
+import { SplitPill, StepPills } from '../components/Pill';
 
 export function WhySheet({ sh }: { sh: WhySheetT }) {
   const vp = parsePlace(S.ui.check.place);
@@ -42,10 +43,18 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
         </div>
       );
     }
+    if (e.kind === 'universal') {
+      return (
+        <div key={i} className="panel">
+          <span className="strong">Every civ can do it</span>
+          <span className="hint">It's marked universal in the Library, and {L.civName(sh.civ)} isn't listed as a civ that can't.</span>
+        </div>
+      );
+    }
     return (
       <div key={i} className="panel">
         <span className="strong">From its parts</span>
-        {e.parts.map((x, j) => <span key={j} className="hint">{L.stepLabel(x.st)}: {L.partText(x.ev[0])}</span>)}
+        {e.parts.map((x, j) => <span key={j} className="hint vs"><SplitPill el={x.st.el} use={x.st} /> {L.partText(x.ev[0])}</span>)}
         <span className="hint">Nothing says {L.civName(sh.civ)} put these together. Tag the whole play if they do.</span>
       </div>
     );
@@ -55,8 +64,9 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
     <>
       <div className="sheet-head">
         <div>
-          <h2 id="sheet-title">{def.name}</h2>
+          <h2 id="sheet-title">{isPlay ? def.name : <SplitPill el={sh.id} size="lg" />}</h2>
           <span className="sublabel"><Flag id={sh.civ} /> {L.civName(sh.civ)}, {phrase}{steps ? '. ' + L.sequence(steps) : ''}</span>
+          {steps && <StepPills steps={steps} />}
         </div>
         <CloseBtn />
       </div>

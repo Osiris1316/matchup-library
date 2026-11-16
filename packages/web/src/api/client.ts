@@ -4,14 +4,14 @@
 import { DEF_TYPES, clone, lowerFirst, type CommitBody, type CommitResult, type DocWrite, type LibraryData, type StateResponse } from '@matchup-library/core';
 import { S, emit, showToast } from '../store';
 
-type Coll = 'tags' | 'games' | 'links' | 'answers';
-const isColl = (c: string): c is Coll => c === 'tags' || c === 'games' || c === 'links' || c === 'answers';
+type Coll = 'tags' | 'games' | 'links' | 'answers' | 'subjects';
+const isColl = (c: string): c is Coll => c === 'tags' || c === 'games' || c === 'links' || c === 'answers' || c === 'subjects';
 
 function applyLocal(col: string, id: string, data: unknown): void {
   if (col === 'defs') { (S.data.defs as unknown as Record<string, unknown[]>)[id] = data ? ((data as { items?: unknown[] }).items || []) : []; return; }
   if (col === 'meta') { if (id === 'settings') S.data.settings = (data || {}) as LibraryData['settings']; return; }
   if (!isColl(col)) return;
-  const coll = S.data[col] as Record<string, unknown>;
+  const coll = (S.data[col] || (S.data[col] = {})) as Record<string, unknown>;
   if (data) coll[id] = data; else delete coll[id];
 }
 function currentDoc(path: string): unknown {
@@ -19,7 +19,7 @@ function currentDoc(path: string): unknown {
   if (col === 'defs') return { items: clone((S.data.defs as unknown as Record<string, unknown[]>)[id] || []) };
   if (col === 'meta') return id === 'settings' ? clone(S.data.settings) : null;
   if (!isColl(col)) return null;
-  const v = (S.data[col] as Record<string, unknown>)[id];
+  const v = ((S.data[col] || {}) as Record<string, unknown>)[id];
   return v ? clone(v) : null;
 }
 function write(path: string, data: unknown): void {
@@ -103,6 +103,7 @@ export async function loadState(quiet = false): Promise<void> {
     S.data.links = st.links || {};
     S.data.tags = st.tags || {};
     S.data.answers = st.answers || {};
+    S.data.subjects = st.subjects || {};
     S.data.settings = st.settings || {};
     S.changes = st.changes || {};
     S.loaded = true;

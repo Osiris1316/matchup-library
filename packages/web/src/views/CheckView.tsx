@@ -4,6 +4,7 @@ import { L, S, civSlug, emit, openSheet, savePrefs } from '../store';
 import { openTagSheet } from '../actions';
 import { Icon } from '../components/Icon';
 import { CivSelect, Lines, MapGroups, PageHead, Seg, UpkeepLink } from '../components/bits';
+import { SplitPill, StepPills } from '../components/Pill';
 
 function CheckCard({ itemKind, id, civ, ev, vp }: { itemKind: ItemKind; id: string; civ: string; ev: Evidence[]; vp: Place }) {
   const def = itemKind === 'play' ? L.strat(id) : L.el(id);
@@ -15,8 +16,8 @@ function CheckCard({ itemKind, id, civ, ev, vp }: { itemKind: ItemKind; id: stri
   const steps = 'steps' in def ? def.steps : null;
   return (
     <button type="button" className="card" data-act="ck-open" data-kind={itemKind} data-id={id} data-civ={civ} onClick={() => openSheet({ kind: 'why', itemKind, id, civ })}>
-      <span className="t">{def.name}</span>
-      {steps && <span className="s">{L.sequence(steps)}</span>}
+      <span className="t">{steps ? def.name : <SplitPill el={id} />}</span>
+      {steps && <StepPills steps={steps} />}
       <span className="why"><Lines lines={more > 0 ? [...shown, 'And ' + more + ' more'] : shown} /></span>
       {hits.length > 0 && <span className="why lead">Comes up on {hits.map((p) => L.wherePhrase(p)).join(', ')}</span>}
     </button>
@@ -72,7 +73,7 @@ export function CheckView() {
             {elsewhere.map((t) => (
               <div key={t.id} className="lrow">
                 <button type="button" className="main-btn" data-act="ck-tag" data-id={t.id} onClick={() => openTagSheet({ tagId: t.id })}>
-                  <span className="t">{L.tagTargetName(t)}{L.tagAgeText(t) ? ' · ' + L.tagAgeText(t) : ''}</span>
+                  <span className="t">{t.el ? <SplitPill el={t.el} use={t} /> : L.tagTargetName(t)}{L.tagAgeText(t) ? ' · ' + L.tagAgeText(t) : ''}</span>
                   <span className="s">{L.placeLabel(t.place)}, so not {phrase}</span>
                 </button>
               </div>

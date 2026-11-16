@@ -3,7 +3,7 @@
 // it to save and load; the import script uses it to turn a preview download
 // into SQL.
 import {
-  AGES, DEF_TYPES, type Age, type Answer, type ChangeEntry, type CommitBody, type DefType, type Defs, type DocWrite,
+  AGES, DEF_TYPES, INTENTS, type Age, type Answer, type Intent, type Subject, type SubjectKind, type ChangeEntry, type CommitBody, type DefType, type Defs, type DocWrite,
   type Game, type Link, type Place, type Settings, type StateResponse, type Tag
 } from './types';
 
@@ -11,7 +11,7 @@ export interface Stmt { sql: string; params: (string | number | null)[] }
 export interface Statements { A: Stmt[]; B: Stmt[] }
 type Row = Record<string, unknown>;
 
-const COLLECTIONS = ['defs', 'meta', 'tags', 'games', 'links', 'answers'] as const;
+const COLLECTIONS = ['defs', 'meta', 'tags', 'games', 'links', 'answers', 'subjects'] as const;
 type Collection = (typeof COLLECTIONS)[number];
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 const SOURCES = ['youtube', 'twitch_vod', 'twitch_highlight', 'twitch_clip', 'aoe4world', 'own_site', 'other'];
@@ -30,6 +30,8 @@ const bit = (v: unknown): number => (v ? 1 : 0);
 const age = (v: unknown): Age | null => (AGES.includes(v as Age) ? (v as Age) : null);
 const int = (v: unknown): number | null => (v == null || v === '' || !Number.isFinite(Number(v)) ? null : Math.round(Number(v)));
 const oneOf = <T extends string>(v: unknown, allowed: readonly T[]): T | null => (allowed.includes(v as T) ? (v as T) : null);
+const intent = (v: unknown): Intent | null => oneOf(v, INTENTS);
+const subj = (v: unknown): string | null => (v == null || v === '' ? null : checkId(v, 'subject'));
 function checkId(id: unknown, what: string): string {
   if (!ID_RE.test(String(id || ''))) throw new BadRequest('Bad id for ' + what + ': ' + String(id));
   return String(id);
@@ -126,10 +128,15 @@ const DEFS: Record<DefType, DefHandler> = {
       const ages: unknown[] = Array.isArray(e.ages) ? e.ages : [];
       const has = (a: Age) => bit(!ages.length || ages.includes(a));
       const merged = opt(e.mergedInto);
+      const cannot: unknown[] = Array.isArray(e.cannot) ? e.cannot : [];
       return [
-        upsert('elements', ['id', 'name', 'kind_id', 'age_dark', 'age_feudal', 'age_castle', 'age_imperial', 'tells', 'description', 'where_note', 'is_active', 'merged_into_id', 'updated_at'],
-          [e.id, str(e.name), str(e.kind), has('dark'), has('feudal'), has('castle'), has('imperial'), str(e.tells), str(e.description), str(e.whereNote), bit(e.active !== false && !merged), merged, now()]),
-        ...placeRows('element_id', e.id, e.where)
+        upsert('elements', ['id', 'name', 'kind_id', 'age_dark', 'age_feudal', 'age_castle', 'age_imperial', 'tells', 'description', 'where_note', 'is_active', 'merged_into_id',
+          'subject_id', 'intent', 'is_universal', 'updated_at'],
+          [e.id, str(e.name), str(e.kind), has('dark'), has('feudal'), has('castle'), has('imperial'), str(e.tells), str(e.description), str(e.whereNote), bit(e.active !== false && !merged), merged,
+            subj(e.subject), intent(e.intent), bit(e.universal), now()]),
+        ...placeRows('element_id', e.id, e.where),
+        stmt('DELETE FROM civ_cannot WHERE element_id = ?', e.id),
+        ...[...new Set(cannot.map(String))].map((c) => stmt('INSERT INTO civ_cannot (civ_id, element_id) VALUES (?, ?)', checkId(c, 'civ'), e.id))
       ];
     }
   },
@@ -142,8 +149,8 @@ const DEFS: Record<DefType, DefHandler> = {
         upsert('strategies', ['id', 'name', 'description', 'notes', 'where_note', 'is_active', 'merged_into_id', 'updated_at'],
           [s.id, str(s.name), str(s.description), str(s.notes), str(s.whereNote), bit(s.active !== false && !merged), merged, now()]),
         stmt('DELETE FROM strategy_elements WHERE strategy_id = ?', s.id),
-        ...steps.map((st) => stmt('INSERT INTO strategy_elements (strategy_id, step_no, element_id, age, notes) VALUES (?, ?, ?, ?, ?)',
-          s.id, Math.max(1, int(st.step) || 1), checkId(st.el, 'element'), age(st.age), str(st.notes))),
+        ...steps.map((st) => stmt('INSERT INTO strategy_elements (strategy_id, step_no, element_id, age, notes, intent, subject_id) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          s.id, Math.max(1, int(st.step) || 1), checkId(st.el, 'element'), age(st.age), str(st.notes), intent(st.intent), subj(st.subject))),
         ...placeRows('strategy_id', s.id, s.where)
       ];
     }
@@ -185,9 +192,11 @@ function tagStatements(id: string, t: Tag | null): Statements {
   const isPlay = !!t.play;
   return {
     A: [upsert('civ_element_tags',
-      ['id', 'civ_id', 'element_id', 'strategy_id', 'age', 'map_type_id', 'feature_id', 'map_id', 'timing_note', 'tells', 'notes', 'last_confirmed_on', 'is_active', 'created_at', 'updated_at'],
+      ['id', 'civ_id', 'element_id', 'strategy_id', 'age', 'map_type_id', 'feature_id', 'map_id', 'timing_note', 'tells', 'notes', 'last_confirmed_on', 'is_active',
+        'intent', 'subject_id', 'created_at', 'updated_at'],
       [id, str(t.civ), isPlay ? null : opt(t.el), isPlay ? opt(t.play) : null, isPlay ? null : age(t.age), p.map_type_id, p.feature_id, p.map_id,
-        str(t.timing), str(t.tells), str(t.notes), opt(t.confirmed), bit(t.active !== false), opt(t.createdAt) || now(), now()],
+        str(t.timing), str(t.tells), str(t.notes), opt(t.confirmed), bit(t.active !== false),
+        isPlay ? null : intent(t.intent), isPlay ? null : subj(t.subject), opt(t.createdAt) || now(), now()],
       ['created_at'])],
     B: []
   };
@@ -204,8 +213,9 @@ function gameStatements(id: string, g: Game | null, before: Game | null | undefi
     const isPlay = !!p.strategyId;
     const runBy = p.runBy === 'player' ? 'player' : 'opponent';
     A.push(upsert('game_plays',
-      ['id', 'game_id', 'position', 'run_by', 'strategy_id', 'element_id', 'age', 'outcome', 'preparedness', 'response_id', 'response_notes', 'notes', 'created_at'],
+      ['id', 'game_id', 'position', 'run_by', 'strategy_id', 'element_id', 'age', 'intent', 'subject_id', 'outcome', 'preparedness', 'response_id', 'response_notes', 'notes', 'created_at'],
       [checkId(p.pid, 'game play'), id, i + 1, runBy, isPlay ? opt(p.strategyId) : null, isPlay ? null : opt(p.elementId), isPlay ? null : age(p.age),
+        isPlay ? null : intent(p.intent), isPlay ? null : subj(p.subject),
         oneOf(p.outcome, ['worked', 'failed', 'mixed'] as const),
         runBy === 'opponent' ? oneOf(p.prep, ['did_not_see', 'saw_no_plan', 'plan_misexecuted', 'handled'] as const) : null,
         opt(p.answerId), str(p.did), str(p.notes), now()],
@@ -230,8 +240,9 @@ function linkStatements(id: string, l: Link | null, before: Link | null | undefi
   marks.forEach((m) => {
     const isPlay = !!m.strategyId;
     A.push(upsert('link_marks',
-      ['id', 'link_id', 'start_seconds', 'game_play_id', 'civ_id', 'strategy_id', 'element_id', 'age', 'shows', 'notes', 'created_at'],
+      ['id', 'link_id', 'start_seconds', 'game_play_id', 'civ_id', 'strategy_id', 'element_id', 'age', 'intent', 'subject_id', 'shows', 'notes', 'created_at'],
       [checkId(m.mid, 'moment'), id, int(m.at), opt(m.playId), opt(m.civ), isPlay ? opt(m.strategyId) : null, isPlay ? null : opt(m.elementId), age(m.age),
+        isPlay ? null : intent(m.intent), isPlay ? null : subj(m.subject),
         oneOf(m.shows, ['threat', 'response', 'both'] as const), str(m.note), now()],
       ['created_at']));
   });
@@ -252,6 +263,12 @@ function answerStatements(id: string, a: Answer | null): Statements {
   return { A, B: [] };
 }
 
+// A subject comes from the game data; the page only sets its default intent.
+function subjectStatements(id: string, x: Subject | null): Statements {
+  if (!x || typeof x !== 'object') throw new BadRequest('Subjects cannot be removed: ' + id);
+  return { A: [stmt('UPDATE subjects SET default_intent = ?, updated_at = ? WHERE id = ?', intent(x.defaultIntent), now(), id)], B: [] };
+}
+
 // One record write as statements: A runs in write order, B (removals that
 // other rows may point at) runs after every A, in reverse write order.
 export function docStatements(path: string, data: unknown, before: unknown): Statements {
@@ -261,6 +278,7 @@ export function docStatements(path: string, data: unknown, before: unknown): Sta
   if (col === 'tags') return tagStatements(id, data as Tag | null);
   if (col === 'games') return gameStatements(id, data as Game | null, before as Game | null);
   if (col === 'links') return linkStatements(id, data as Link | null, before as Link | null);
+  if (col === 'subjects') return subjectStatements(id, data as Subject | null);
   return answerStatements(id, data as Answer | null);
 }
 
@@ -307,6 +325,8 @@ export const STATE_QUERIES = [
   ['mapFeatures', 'SELECT map_id, feature_id FROM map_has_feature ORDER BY rowid'],
   ['kinds', 'SELECT * FROM element_kinds ORDER BY sort_order, rowid'],
   ['elements', 'SELECT * FROM elements ORDER BY rowid'],
+  ['cannot', 'SELECT civ_id, element_id FROM civ_cannot ORDER BY element_id, civ_id'],
+  ['subjects', 'SELECT id, name, kind, min_age, civs, icon, default_intent, is_active FROM subjects ORDER BY kind, name'],
   ['strategies', 'SELECT * FROM strategies ORDER BY rowid'],
   ['steps', 'SELECT * FROM strategy_elements ORDER BY strategy_id, step_no, element_id'],
   ['comesUpOn', 'SELECT * FROM comes_up_on ORDER BY id'],
@@ -338,6 +358,14 @@ export function buildState(r: StateRows): StateResponse {
   const cuoSt = group(r.comesUpOn.filter((x) => x.strategy_id), 'strategy_id');
   const feats = group(r.mapFeatures, 'map_id');
   const steps = group(r.steps, 'strategy_id');
+  const cannot = group(r.cannot, 'element_id');
+  const look = (x: Row): { intent?: Intent; subject?: string } => {
+    const o: { intent?: Intent; subject?: string } = {};
+    const i = intent(x.intent), sj = sn(x.subject_id);
+    if (i) o.intent = i;
+    if (sj) o.subject = sj;
+    return o;
+  };
   const defs: Defs = {
     civs: r.civs.map((c) => ({ id: s(c.id), name: s(c.name), short: s(c.short_name), flag: sn(c.flag_slug), parent: sn(c.parent_civ_id), active: !!c.is_active })),
     mapTypes: r.mapTypes.map((x) => ({ id: s(x.id), name: s(x.name), description: s(x.description), active: !!x.is_active })),
@@ -346,15 +374,16 @@ export function buildState(r: StateRows): StateResponse {
       features: (feats.get(m.id) || []).map((f) => s(f.feature_id)), inPool: !!m.in_pool, active: !!m.is_active })),
     kinds: r.kinds.map((x) => ({ id: s(x.id), name: s(x.name), description: s(x.description), active: !!x.is_active })),
     elements: r.elements.map((e) => ({ id: s(e.id), name: s(e.name), kind: s(e.kind_id), ages: AGES.filter((a) => e['age_' + a]), tells: s(e.tells), description: s(e.description),
-      where: where(cuoEl.get(e.id) || []), whereNote: s(e.where_note), active: !!e.is_active, mergedInto: sn(e.merged_into_id) })),
+      where: where(cuoEl.get(e.id) || []), whereNote: s(e.where_note), active: !!e.is_active, mergedInto: sn(e.merged_into_id),
+      subject: sn(e.subject_id), intent: intent(e.intent), universal: !!e.is_universal, cannot: (cannot.get(e.id) || []).map((c) => s(c.civ_id)) })),
     strategies: r.strategies.map((st) => ({ id: s(st.id), name: s(st.name), description: s(st.description), notes: s(st.notes),
-      steps: (steps.get(st.id) || []).map((x) => ({ el: s(x.element_id), age: age(x.age), step: Number(x.step_no), notes: s(x.notes) })),
+      steps: (steps.get(st.id) || []).map((x) => ({ el: s(x.element_id), age: age(x.age), step: Number(x.step_no), notes: s(x.notes), ...look(x) })),
       where: where(cuoSt.get(st.id) || []), whereNote: s(st.where_note), active: !!st.is_active, mergedInto: sn(st.merged_into_id) }))
   };
   const tags: StateResponse['tags'] = {};
   r.tags.forEach((t) => {
     tags[s(t.id)] = { civ: s(t.civ_id), el: sn(t.element_id), play: sn(t.strategy_id), age: age(t.age), place: placeOf(t),
-      timing: s(t.timing_note), tells: s(t.tells), notes: s(t.notes), confirmed: sn(t.last_confirmed_on), active: !!t.is_active, createdAt: sn(t.created_at) };
+      timing: s(t.timing_note), tells: s(t.tells), notes: s(t.notes), confirmed: sn(t.last_confirmed_on), active: !!t.is_active, createdAt: sn(t.created_at), ...look(t) };
   });
   const plays = group(r.plays, 'game_id');
   const games: StateResponse['games'] = {};
@@ -364,7 +393,7 @@ export function buildState(r: StateRows): StateResponse {
       aoe4worldGameId: nn(g.aoe4world_game_id), createdAt: sn(g.created_at),
       plays: (plays.get(g.id) || []).map((p) => ({ pid: s(p.id), runBy: p.run_by === 'player' ? 'player' : 'opponent', strategyId: sn(p.strategy_id), elementId: sn(p.element_id), age: age(p.age),
         outcome: oneOf(p.outcome, ['worked', 'failed', 'mixed'] as const), prep: oneOf(p.preparedness, ['did_not_see', 'saw_no_plan', 'plan_misexecuted', 'handled'] as const),
-        answerId: sn(p.response_id), did: s(p.response_notes), notes: s(p.notes) })) };
+        answerId: sn(p.response_id), did: s(p.response_notes), notes: s(p.notes), ...look(p) })) };
   });
   const marks = group(r.marks, 'link_id');
   const links: StateResponse['links'] = {};
@@ -373,7 +402,7 @@ export function buildState(r: StateRows): StateResponse {
       kind: l.kind === 'game' ? 'game' : 'guide', civ: sn(l.civ_id), map: sn(l.map_id),
       openAt: nn(l.start_offset_seconds), status: l.link_status === 'dead' ? 'dead' : 'live', checked: sn(l.last_checked_on), notes: s(l.notes), createdAt: sn(l.created_at),
       marks: (marks.get(l.id) || []).map((m) => ({ mid: s(m.id), at: nn(m.start_seconds), playId: sn(m.game_play_id), civ: sn(m.civ_id),
-        elementId: sn(m.element_id), strategyId: sn(m.strategy_id), age: age(m.age), shows: oneOf(m.shows, ['threat', 'response', 'both'] as const), note: s(m.notes) })) };
+        elementId: sn(m.element_id), strategyId: sn(m.strategy_id), age: age(m.age), shows: oneOf(m.shows, ['threat', 'response', 'both'] as const), note: s(m.notes), ...look(m) })) };
   });
   const asteps = group(r.answerSteps, 'response_id');
   const answers: StateResponse['answers'] = {};
@@ -384,6 +413,13 @@ export function buildState(r: StateRows): StateResponse {
       confirmed: sn(a.last_confirmed_on), active: !!a.is_active, createdAt: sn(a.created_at),
       steps: (asteps.get(a.id) || []).map((st) => ({ answerId: sn(st.element_response_id), note: s(st.note) })) };
   });
+  const subjects: Record<string, Subject> = {};
+  r.subjects.forEach((x) => {
+    let civs: string[] | null = null;
+    try { civs = x.civs ? (JSON.parse(s(x.civs)) as string[]) : null; } catch { civs = null; }
+    subjects[s(x.id)] = { id: s(x.id), name: s(x.name), kind: (oneOf(x.kind, ['unit', 'building', 'landmark', 'technology'] as const) || 'unit') as SubjectKind,
+      age: nn(x.min_age), civs, icon: sn(x.icon), defaultIntent: intent(x.default_intent), active: !!x.is_active };
+  });
   const settings: Settings = {};
   r.settings.forEach((x) => { try { settings[s(x.key)] = JSON.parse(s(x.value)); } catch { settings[s(x.key)] = x.value; } });
   const changes: Record<string, ChangeEntry> = {};
@@ -392,7 +428,7 @@ export function buildState(r: StateRows): StateResponse {
     try { before = JSON.parse(s(c.before_json)) as DocWrite[]; } catch { before = []; }
     changes[s(c.id)] = { label: s(c.label), at: s(c.changed_at), before };
   });
-  return { defs, tags, games, links, answers, settings, changes };
+  return { defs, subjects, tags, games, links, answers, settings, changes };
 }
 
 // SQL text with the values written in, for files run by wrangler d1 execute.

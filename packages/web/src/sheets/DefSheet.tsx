@@ -1,6 +1,8 @@
-// Edit or add a definition: element, play, kind, feature, map, map type or civ.
-import { AGES, AGE_NAME, byName, guideTitle, isActive, parsePlace, placeKey, type ItemKind } from '@matchup-library/core';
-import { L, S, bind, emit, showToast, toggleIn, type DefDraft, type DefSheet as DefSheetT } from '../store';
+// Edit or add a definition: play, kind, feature, map, map type or civ.
+// Elements are edited beside the list in the Library (views/ElementEditor.tsx),
+// which reuses the civ, "comes up on" and references fields from here.
+import { byName, guideTitle, isActive, parsePlace, placeKey, type ItemKind } from '@matchup-library/core';
+import { L, S, bind, emit, toggleIn, type DefDraft, type DefSheet as DefSheetT } from '../store';
 import { DEF_WORD, saveDef, toggleDefActive } from '../actions';
 import { Flag } from '../components/Flag';
 import { Builder, MultiSelect, type MsOption } from '../components/pickers';
@@ -8,7 +10,7 @@ import { CloseBtn, Field } from '../components/bits';
 import { GameTitle } from '../views/RefsView';
 
 // Which civs do it: ticking one tags it anywhere.
-function CivChips({ field, id, d }: { field: ItemKind; id: string | null; d: DefDraft }) {
+export function CivChips({ field, id, d }: { field: ItemKind; id: string | null; d: DefDraft }) {
   const states: Record<string, 'on' | 'some'> = {};
   if (id) L.activeTags().filter((t) => t[field] === id).forEach((t) => { states[t.civ] = placeKey(t.place) === 'any:' ? 'on' : states[t.civ] || 'some'; });
   const civs = L.activeCivs();
@@ -26,7 +28,7 @@ function CivChips({ field, id, d }: { field: ItemKind; id: string | null; d: Def
 }
 
 // "Comes up on": map notes on the element or play itself, true for any civ.
-function WhereField({ d }: { d: DefDraft }) {
+export function WhereField({ d }: { d: DefDraft }) {
   const options: MsOption[] = [
     ...L.activeTypes().map((t) => ({ group: 'Map types', value: 'type:' + t.id, label: t.name + ' maps' })),
     ...L.activeFeatures().map((f) => ({ group: 'Map features', value: 'feature:' + f.id, label: f.name })),
@@ -48,7 +50,7 @@ function WhereField({ d }: { d: DefDraft }) {
 }
 
 // Every game or guide moment that shows it.
-function RefsSection({ field, id }: { field: ItemKind; id: string }) {
+export function RefsSection({ field, id }: { field: ItemKind; id: string }) {
   const rows = L.refsFor(field, id);
   if (!rows.length) return null;
   return (
@@ -71,34 +73,7 @@ export function DefSheet({ sh }: { sh: DefSheetT }) {
   const it = sh.id ? (S.data.defs[t] as { id: string; name: string; active: boolean; mergedInto?: string | null }[]).find((x) => x.id === sh.id) || null : null;
   const desc = (ph?: string) => <Field id="df-desc" label="Description"><textarea id="df-desc" className="textarea" rows={2} placeholder={ph || ''} {...bind(d, 'description')} /></Field>;
   let body;
-  if (t === 'elements') {
-    body = <>
-      {it && <CivChips field="el" id={sh.id} d={d} />}
-      <Field id="df-kind" label="Kind">
-        <select id="df-kind" className="select" {...bind(d, 'kind')}>
-          {S.data.defs.kinds.filter((k) => isActive(k) || k.id === d.kind).map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
-        </select>
-      </Field>
-      <div className="field">
-        <span className="label">Can happen in</span>
-        <div className="tiles" role="group" aria-label="Ages it can happen in">
-          {AGES.map((a) => (
-            <button key={a} type="button" data-act="df-age" data-v={a} aria-pressed={d.ages.includes(a)} onClick={() => {
-              const next = AGES.filter((x) => (x === a ? !d.ages.includes(x) : d.ages.includes(x)));
-              if (!next.length) { showToast('Keep at least one age on.', true); return; }
-              d.ages = next; emit();
-            }}>{AGE_NAME[a]}</button>
-          ))}
-        </div>
-        <span className="hint">Leave every age on unless you're sure it can't happen then.</span>
-      </div>
-      {desc('What it is')}
-      <Field id="df-tells" label="Tells, for anyone doing it"><textarea id="df-tells" className="textarea" rows={2} placeholder="What you'd scout that gives it away" {...bind(d, 'tells')} /></Field>
-      {!it && <CivChips field="el" id={sh.id} d={d} />}
-      <WhereField d={d} />
-      {it && <RefsSection field="el" id={it.id} />}
-    </>;
-  } else if (t === 'strategies') {
+  if (t === 'strategies') {
     body = <>
       {it ? <><CivChips field="play" id={sh.id} d={d} /><Builder sh={sh} mode="steps" /></> : <><Builder sh={sh} mode="steps" /><CivChips field="play" id={sh.id} d={d} /></>}
       {desc('What the play is going for')}

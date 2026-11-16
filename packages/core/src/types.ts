@@ -11,6 +11,25 @@ export type Place =
   | { kind: 'type' | 'feature' | 'map'; id: string };
 export type PlaceKind = Place['kind'];
 
+// Intent colours an element's name: offensive red, defensive blue, economic
+// green, or none (grey). An element has a default, and each use can override it.
+export type Intent = 'offensive' | 'defensive' | 'economic';
+export const INTENTS: Intent[] = ['offensive', 'defensive', 'economic'];
+export const INTENT_NAME: Record<Intent, string> = { offensive: 'Offensive', defensive: 'Defensive', economic: 'Economic' };
+// The four element types colour the icon tile. They are rows in element_kinds.
+export type ElType = 'unit' | 'structure' | 'economy' | 'age_tech';
+export const EL_TYPES: ElType[] = ['unit', 'structure', 'economy', 'age_tech'];
+export const EL_TYPE_NAME: Record<ElType, string> = { unit: 'Unit', structure: 'Structure', economy: 'Economy', age_tech: 'Age-up or tech' };
+export const EL_TYPE_GROUP: Record<ElType, string> = { unit: 'Units', structure: 'Structures', economy: 'Economy', age_tech: 'Age-ups and tech' };
+// A thing in the game, from the aoe4world data repo. It gives an element its icon.
+export type SubjectKind = 'unit' | 'building' | 'landmark' | 'technology';
+export interface Subject {
+  id: string; name: string; kind: SubjectKind; age: number | null; civs: string[] | null; icon: string | null;
+  defaultIntent: Intent | null; active: boolean;
+}
+// The overrides every use of an element can carry.
+export interface UseLook { intent?: Intent | null; subject?: string | null }
+
 // ---------------------------------------------------------------------------
 // Definitions
 // ---------------------------------------------------------------------------
@@ -25,9 +44,12 @@ export interface MapDef {
 export interface Element {
   id: string; name: string; kind: string; ages: Age[]; tells: string; description: string;
   where: Place[]; whereNote: string; active: boolean; mergedInto?: string | null;
+  subject?: string | null; intent?: Intent | null;
+  universal?: boolean;            // every civ can do it; cannot lists the exceptions
+  cannot?: string[];
 }
 // One element of a play. Same step = at the same time; a higher step comes later.
-export interface Step { el: string; age: Age | null; step: number; notes: string }
+export interface Step extends UseLook { el: string; age: Age | null; step: number; notes: string }
 export interface Strategy {
   id: string; name: string; description: string; notes: string; steps: Step[];
   where: Place[]; whereNote: string; active: boolean; mergedInto: string | null;
@@ -43,7 +65,7 @@ export const DEF_TYPES: DefType[] = ['civs', 'mapTypes', 'features', 'maps', 'ki
 // Records
 // ---------------------------------------------------------------------------
 // A civ does an element (optionally in one age) or a whole play, in a place.
-export interface Tag {
+export interface Tag extends UseLook {
   civ: string; el: string | null; play: string | null; age: Age | null; place: Place;
   timing: string; tells: string; notes: string; confirmed: string | null; active: boolean;
   createdAt?: string | null; copiedFrom?: string;
@@ -51,7 +73,7 @@ export interface Tag {
 export type Outcome = 'worked' | 'mixed' | 'failed';
 export type Prep = 'did_not_see' | 'saw_no_plan' | 'plan_misexecuted' | 'handled';
 // What one side did in a game: a whole play, or one element with its age.
-export interface GamePlay {
+export interface GamePlay extends UseLook {
   pid: string; runBy: 'player' | 'opponent'; strategyId: string | null; elementId?: string | null; age?: Age | null;
   outcome: Outcome | null; prep: Prep | null; answerId: string | null; did: string; notes: string;
 }
@@ -63,7 +85,7 @@ export interface Game {
 export type Shows = 'threat' | 'response' | 'both';
 // A timestamped moment in a link. In a game's link it points at a play; in a
 // guide it names the civ and what it shows.
-export interface Mark {
+export interface Mark extends UseLook {
   mid: string; at: number | null; playId: string | null; civ: string | null;
   elementId: string | null; strategyId: string | null; age: Age | null; shows: Shows | null; note: string;
 }
@@ -85,6 +107,7 @@ export interface Settings { lastPatch?: string | null; [key: string]: unknown }
 // Everything the page loads.
 export interface LibraryData {
   defs: Defs;
+  subjects?: Record<string, Subject>;
   tags: Record<string, Tag>;
   games: Record<string, Game>;
   links: Record<string, Link>;
@@ -95,7 +118,8 @@ export interface LibraryData {
 // ---------------------------------------------------------------------------
 // The API
 // ---------------------------------------------------------------------------
-// A record path: defs/<type>, meta/settings, tags/<id>, games/<id>, links/<id>, answers/<id>.
+// A record path: defs/<type>, meta/settings, tags/<id>, games/<id>, links/<id>, answers/<id>,
+// subjects/<id> (only a subject's default intent is saved).
 export type DocPath = string;
 export interface DocWrite { path: DocPath; data: unknown }
 export interface ChangeEntry { label: string; at: string; before: DocWrite[] }

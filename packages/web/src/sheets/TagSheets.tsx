@@ -1,9 +1,11 @@
 // Tag one element or play for a civ, or tick many at once.
-import { AGE_NAME, agesText, byName, isActive, placeKey, plural, tagField, tagTargetId } from '@matchup-library/core';
+import type { ReactNode } from 'react';
+import { AGE_NAME, INTENTS, INTENT_NAME, agesText, byName, isActive, placeKey, plural, tagField, tagTargetId, type Intent } from '@matchup-library/core';
 import { L, S, bind, closeSheet, emit, toggleIn, type BulkSheet as BulkSheetT, type TagSheet as TagSheetT } from '../store';
 import { elementGroups, retireTagFromSheet, saveBulk, saveTag } from '../actions';
-import { PlacePicker } from '../components/pickers';
+import { LandmarkOptions, PlacePicker } from '../components/pickers';
 import { CloseBtn, Seg, SheetBack } from '../components/bits';
+import { SplitPill, StepPills } from '../components/Pill';
 
 export function TagSheet({ sh }: { sh: TagSheetT }) {
   const d = sh.draft;
@@ -16,8 +18,9 @@ export function TagSheet({ sh }: { sh: TagSheetT }) {
       <SheetBack />
       <div className="sheet-head">
         <div>
-          <h2 id="sheet-title">{def ? def.name : ''}</h2>
+          <h2 id="sheet-title">{isEl && def ? <SplitPill el={d.target} use={{ intent: d.intent || null, subject: d.subject || null }} size="lg" /> : def ? def.name : ''}</h2>
           <span className="sublabel">{d.tagId ? 'Tag' : 'New tag'} for {L.civName(d.civ)}{steps ? '. ' + L.sequence(steps) : ''}</span>
+          {steps && <StepPills steps={steps} />}
         </div>
         <CloseBtn />
       </div>
@@ -27,6 +30,27 @@ export function TagSheet({ sh }: { sh: TagSheetT }) {
         <div className="field">
           <span className="label">Age</span>
           <Seg label="Age" act="tg-age" options={[['', 'Any'], ...ages.map((a) => [a, AGE_NAME[a]] as [string, string])]} current={d.age || ''} onPick={(v) => { d.age = (v || null) as typeof d.age; emit(); }} />
+        </div>
+      )}
+      {isEl && (
+        <div className="field">
+          <span className="label">How {L.civShort(d.civ)} uses it</span>
+          <div className="intentseg small" role="group" aria-label="Intent">
+            {([null, ...INTENTS] as (Intent | null)[]).map((i) => (
+              <button key={i || 'usual'} type="button" data-act="tg-intent" data-v={i || ''} data-intent={i || L.elIntent(d.target) || 'none'} aria-pressed={(d.intent || null) === i}
+                onClick={() => { d.intent = i || ''; emit(); }}>{i ? INTENT_NAME[i] : 'Usual'}</button>
+            ))}
+          </div>
+          <span className="hint">Usual means the element's own intent{L.elIntent(d.target) ? ', ' + INTENT_NAME[L.elIntent(d.target) as Intent].toLowerCase() : ''}.</span>
+        </div>
+      )}
+      {isEl && L.elType(d.target) === 'age_tech' && L.subjects().some((x) => x.kind === 'landmark') && (
+        <div className="field">
+          <label className="label" htmlFor="tg-subject">Landmark</label>
+          <select id="tg-subject" className="select" value={d.subject} onChange={(e) => { d.subject = e.target.value; emit(); }}>
+            <option value="">{L.el(d.target)?.subject ? 'Its usual icon' : 'No landmark'}</option>
+            <LandmarkOptions age={d.age} />
+          </select>
         </div>
       )}
       <div className="field"><label className="label" htmlFor="tg-timing">Timing</label><input id="tg-timing" className="input" type="text" placeholder="When it shows up, in words" {...bind(d, 'timing')} /></div>
@@ -46,7 +70,7 @@ export function BulkSheet({ sh }: { sh: BulkSheetT }) {
   const pk = placeKey(d.place);
   const here = new Set(L.activeTags().filter((t) => t.civ === d.civ && placeKey(t.place) === pk && !t.age && tagField(t) === d.seg).map(tagTargetId));
   const picked = isEl ? d.pickedEl : d.pickedPlay;
-  const box = (id: string, name: string, sub: string) => {
+  const box = (id: string, name: ReactNode, sub: string) => {
     const already = here.has(id);
     return (
       <label key={id} className="check">
@@ -62,7 +86,7 @@ export function BulkSheet({ sh }: { sh: BulkSheetT }) {
     ? elementGroups().map((g) => (
         <div key={g.name}>
           <div className="group"><h3 className="label">{g.name}</h3></div>
-          {g.items.map((e) => box(e.id, e.name, agesText(L.elAges(e.id))))}
+          {g.items.map((e) => box(e.id, <SplitPill el={e.id} />, agesText(L.elAges(e.id))))}
         </div>
       ))
     : S.data.defs.strategies.filter(isActive).sort(byName).map((s) => box(s.id, s.name, L.sequence(s.steps)));
