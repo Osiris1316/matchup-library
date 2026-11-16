@@ -38,7 +38,7 @@ const KEEP: Target[] = [
   { key: 'maa', match: ['maa_spam', 'maa spam'], name: 'Men-at-arms', type: 'unit', intent: 'offensive', subject: 'man-at-arms' },
   { key: 'spears', match: ['spear_rush', 'spear rush'], name: 'Spears', type: 'unit', intent: 'offensive', subject: 'spearman' },
   { key: 'caterans', match: ['catered_rush', 'catered rush', 'cateran rush'], name: 'Caterans', type: 'unit', intent: 'offensive', subject: 'cateran' },
-  { key: 'reivers', match: ['border_reivers', 'border reivers', 'border reiver'], name: 'Border reivers', type: 'unit', intent: 'offensive', subject: 'border-reiver' },
+  { key: 'reivers', match: ['border_reivers', 'border_reaver_muster', 'border reivers', 'border reiver', 'border reaver muster'], name: 'Border reivers', type: 'unit', intent: 'offensive', subject: 'border-reiver' },
   { key: 'horsemen', match: ['horsemen', 'horseman'], name: 'Horsemen', type: 'unit', intent: 'offensive', subject: 'horseman' },
   { key: 'walls', match: ['offensive_walls', 'offensive walls'], name: 'Walls', type: 'structure', intent: 'offensive', subject: 'palisade' },
   { key: 'keep', match: ['fortress_boom', 'fortress boom'], name: 'Keep', type: 'structure', intent: 'defensive', subject: 'keep' },
@@ -76,9 +76,12 @@ const byId = new Map(els.map((e) => [e.id, e]));
 const plan: string[] = [], needs: string[] = [], sql: string[] = [];
 const q = (v: string | number | null | undefined): string => (v == null ? 'NULL' : typeof v === 'number' ? String(v) : "'" + String(v).replace(/'/g, "''") + "'");
 const now = new Date().toISOString();
+// An id match wins over a name match, so maa_spam finds maa_spam even when
+// another element is named "MaA Spam".
 function find(match: string[]): Element[] {
   const ids = new Set(match.map(norm));
-  return els.filter((e) => ids.has(norm(e.id)) || ids.has(norm(e.name)));
+  const byIdHits = els.filter((e) => ids.has(norm(e.id)));
+  return byIdHits.length ? byIdHits : els.filter((e) => ids.has(norm(e.name)));
 }
 function one(match: string[], what: string): Element | null {
   const hits = find(match).filter((e) => !e.mergedInto);
@@ -129,6 +132,7 @@ function moveTag(t: TagRow, el: string, intent: Intent | null, subject: string |
     sql.push(`UPDATE civ_element_tags SET timing_note = ${q(words.timing)}, tells = ${q(words.tells)}, notes = ${q(words.notes)}, is_active = ${twin.active !== false || t.active !== false ? 1 : 0}, updated_at = ${q(now)} WHERE id = ${q(twin.id)};`);
     sql.push(`DELETE FROM civ_element_tags WHERE id = ${q(t.id)};`);
     Object.assign(twin, words, { active: twin.active !== false || t.active !== false });
+    Object.assign(t, { el: null, active: false });
     plan.push('  ' + t.civ + ': its ' + why + ' tag was the same as an existing one, so the two were combined.');
     return;
   }
@@ -236,7 +240,7 @@ const universal = [...NEW.filter((n) => n.universal && newIds.has(n.id)).map((n)
 universal.forEach((u) => {
   const plain = tags.filter((t) => t.el === u.id && t.active !== false && placeKey(t.place) === 'any:' && !t.age && !t.intent && !t.subject && !t.timing && !t.tells && !t.notes);
   const kept = tags.filter((t) => t.el === u.id && t.active !== false && !plain.includes(t));
-  plain.forEach((t) => sql.push(`UPDATE civ_element_tags SET is_active = 0, updated_at = ${q(now)} WHERE id = ${q(t.id)};`));
+  plain.forEach((t) => { sql.push(`UPDATE civ_element_tags SET is_active = 0, updated_at = ${q(now)} WHERE id = ${q(t.id)};`); t.active = false; });
   plan.push(u.name + ' counts for every civ now. ' + count(plain.length, 'plain all-civ tag', 'plain all-civ tags') + ' retired' + (kept.length ? '; ' + kept.length + ' kept because they say something (' + kept.map((t) => t.civ + (t.intent ? ' ' + t.intent : '') + (placeKey(t.place) !== 'any:' ? ' on ' + placeKey(t.place) : '')).join(', ') + ').' : '.'));
 });
 
@@ -245,6 +249,26 @@ sql.push(`UPDATE element_kinds SET is_active = 0 WHERE id NOT IN (${TYPES.map(q)
 plan.push('Old element kinds retired: ' + (ex.defs.kinds || []).filter((k) => !TYPES.includes(k.id as ElType)).map((k) => k.name).join(', ') + '.');
 els.filter((e) => e.active !== false && !e.mergedInto && !used.has(e.id) && !TYPES.includes(e.kind as ElType)).forEach((e) => {
   needs.push(e.name + ' (' + e.id + ', kind ' + e.kind + ') has no mapping. Give it a type, icon and intent in the Library.');
+});
+
+// ---------------------------------------------------------------- every element, after
+// Replays the plan's effect on the download, so the list shows each element
+// as it will be: name, type, intent, icon, and what points at it.
+const after = new Map<string, { name: string; type: string; intent: string; subject: string; active: boolean; merged: string }>();
+els.forEach((e) => after.set(e.id, { name: e.name, type: e.kind, intent: e.intent || '', subject: e.subject || '', active: e.active !== false && !e.mergedInto, merged: e.mergedInto || '' }));
+NEW.filter((n) => newIds.has(n.id)).forEach((n) => after.set(n.id, { name: n.name, type: n.type, intent: n.intent || '', subject: n.subject || '', active: true, merged: '' }));
+KEEP.forEach((t) => { const id = keyId.get(t.key); if (id) after.set(id, { name: t.name, type: t.type, intent: t.intent || '', subject: t.subject || '', active: true, merged: '' }); });
+sql.filter((x) => x.startsWith('UPDATE elements SET is_active = 0, merged_into_id')).forEach((x) => {
+  const m = /merged_into_id = '([^']+)'.*WHERE id = '([^']+)'/.exec(x);
+  const a = m && after.get(m[2] as string);
+  if (m && a) Object.assign(a, { active: false, merged: m[1] as string });
+});
+const listing: string[] = [];
+[...after.entries()].filter(([, a]) => a.active).sort((x, y) => x[1].type.localeCompare(y[1].type) || x[1].name.localeCompare(y[1].name)).forEach(([id, a]) => {
+  const activeTags = tags.filter((t) => t.el === id && t.active !== false).length;
+  const plays = strategies.filter((s) => s.active !== false && s.steps.some((st) => st.el === id)).length;
+  listing.push(a.name + ' (' + id + '): ' + (TYPES.includes(a.type as ElType) ? a.type : 'NO TYPE, was ' + a.type) + (a.intent ? ', ' + a.intent : '') + (a.subject ? ', icon ' + a.subject : ', no icon') +
+    '; ' + count(activeTags, 'active tag', 'active tags') + ', ' + count(plays, 'play', 'plays') + (used.has(id) || newIds.has(id) ? '' : '. Not in the mapping, left as it was.'));
 });
 
 // ---------------------------------------------------------------- write
@@ -258,7 +282,11 @@ const header = [
   '--',
   '-- Needs you',
   ...(needs.length ? needs.map((l) => '--   ' + l) : ['--   Nothing.']),
+  '--',
+  '-- Every active element afterwards',
+  ...listing.map((l) => '--   ' + l),
   ''
 ];
 writeFileSync(output, header.join('\n') + '\n' + sql.join('\n') + '\n');
-console.log(['The plan', ...plan.map((l) => '  ' + l), '', 'Needs you', ...(needs.length ? needs.map((l) => '  ' + l) : ['  Nothing.']), '', 'Wrote ' + output + ': ' + sql.length + ' statements.'].join('\n'));
+console.log(['The plan', ...plan.map((l) => '  ' + l), '', 'Needs you', ...(needs.length ? needs.map((l) => '  ' + l) : ['  Nothing.']), '',
+  'Every active element afterwards', ...listing.map((l) => '  ' + l), '', 'Wrote ' + output + ': ' + sql.length + ' statements.'].join('\n'));
