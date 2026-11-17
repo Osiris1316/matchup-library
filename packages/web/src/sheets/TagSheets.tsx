@@ -6,12 +6,16 @@ import { elementGroups, retireTagFromSheet, saveBulk, saveTag } from '../actions
 import { LandmarkOptions, PlacePicker } from '../components/pickers';
 import { CloseBtn, Seg, SheetBack } from '../components/bits';
 import { SplitPill, StepPills } from '../components/Pill';
+import { BlockList } from '../components/Blocks';
+import { openForCiv } from '../actions';
 
 export function TagSheet({ sh }: { sh: TagSheetT }) {
   const d = sh.draft;
   const isEl = d.field === 'el';
   const def = L.itemDef(d.field, d.target);
-  const ages = isEl ? L.elAges(d.target) : [];
+  // An element tag offers only the ages this civ can do it in.
+  const ages = isEl ? L.civAges(d.civ, d.target) : [];
+  const blocks = L.blockers(d.civ, d.field, d.target, isEl ? d.age : null);
   const play = d.field === 'play' ? L.play(d.target) : null;
   const plan = d.field === 'plan' ? L.plan(d.target) : null;
   const steps = play ? play.steps : null;
@@ -26,12 +30,14 @@ export function TagSheet({ sh }: { sh: TagSheetT }) {
         </div>
         <CloseBtn />
       </div>
+      <BlockList civ={d.civ} blocks={blocks} />
       {isEl && def && 'tells' in def && def.tells && <p className="hint"><span className="strong">Tells for anyone doing it:</span> {def.tells}</p>}
       <PlacePicker owner={d} />
       {isEl && ages.length > 1 && (
         <div className="field">
           <span className="label">Age</span>
           <Seg label="Age" act="tg-age" options={[['', 'Any'], ...ages.map((a) => [a, AGE_NAME[a]] as [string, string])]} current={d.age || ''} onPick={(v) => { d.age = (v || null) as typeof d.age; emit(); }} />
+          {L.hasOwnAges(d.civ, d.target) && <span className="hint">{L.civShort(d.civ)}'s own ages for it. Change them in Library, on the element.</span>}
         </div>
       )}
       {isEl && (
@@ -72,16 +78,25 @@ export function BulkSheet({ sh }: { sh: BulkSheetT }) {
   const pk = placeKey(d.place);
   const here = new Set(L.activeTags().filter((t) => t.civ === d.civ && placeKey(t.place) === pk && !t.age && tagField(t) === seg).map(tagTargetId));
   const picked = d.picked[seg];
+  // Something this civ can't do in its age can't be ticked; its fix sits beside it.
   const box = (id: string, name: ReactNode, sub: string) => {
     const already = here.has(id);
-    return (
+    const block = already ? undefined : L.blockers(d.civ, seg, id)[0];
+    const label = (
       <label key={id} className="check">
-        <input type="checkbox" id={'bk-' + id} value={id} checked={already || picked.includes(id)} disabled={already} onChange={(e) => {
+        <input type="checkbox" id={'bk-' + id} value={id} checked={!block && (already || picked.includes(id))} disabled={already || !!block} onChange={(e) => {
           d.picked[seg] = toggleIn(d.picked[seg], id, e.target.checked);
           emit();
         }} />
-        <span className="txt"><span className="fw5">{name}</span><span className="sublabel">{already ? 'Already tagged here' : sub}</span></span>
+        <span className="txt"><span className="fw5">{name}</span><span className={'sublabel' + (block ? ' warn-text' : '')}>{already ? 'Already tagged here' : block ? L.blockText(d.civ, block) : sub}</span></span>
       </label>
+    );
+    if (!block) return label;
+    return (
+      <div key={id} className="check-fix">
+        {label}
+        <button type="button" className="btn btn-outline btn-sm" data-act="open-for-civ" data-civ={d.civ} data-el={block.el} onClick={() => openForCiv(d.civ, block)}>Allow for {L.civShort(d.civ)}</button>
+      </div>
     );
   };
   const list = seg === 'el'
@@ -99,7 +114,7 @@ export function BulkSheet({ sh }: { sh: BulkSheetT }) {
           </div>
         ))
       : S.data.defs.gamePlans.filter(isActive).sort(byName).map((g) => box(g.id, g.name, stagesOf(g).length ? L.planSequence(g) : 'No plays yet'));
-  const n = picked.filter((id) => !here.has(id)).length;
+  const n = picked.filter((id) => !here.has(id) && !L.blockers(d.civ, seg, id).length).length;
   return (
     <>
       <div className="sheet-head">

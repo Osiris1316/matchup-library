@@ -1,12 +1,13 @@
 // Pickers used inside sheets: a dropdown checklist, a place picker, and the
 // step builder for plays and moments.
 import { Fragment, type ReactNode } from 'react';
-import { AGES, INTENT_NAME, STAGE_AGES, STAGE_NAME, agesText, builderToSteps, type Age, type BuilderRow } from '@matchup-library/core';
+import { AGES, AGE_NAME, INTENT_NAME, STAGE_AGES, STAGE_NAME, builderToSteps, type Age, type BuilderRow } from '@matchup-library/core';
 import { L, S, emit, type DefSheet, type MomentSheet, type PlaceDraft } from '../store';
-import { addStep, cycleIntent, elementGroups, setPlaceKind } from '../actions';
+import { addStep, cycleIntent, elementGroups, momentCiv, setPlaceKind } from '../actions';
 import { Icon } from './Icon';
 import { MapGroups, Seg } from './bits';
 import { SplitPill } from './Pill';
+import { BlockList, OpenStep } from './Blocks';
 
 // Landmarks you can age up with, grouped by civ. An age-up during an age is
 // built in that age: Dark builds the Feudal landmarks (aoe4world age 1).
@@ -131,8 +132,12 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
   const d = sh.draft;
   const age: Age = d.age;
   const togglePick = () => { sh.picking = !sh.picking; emit(); };
+  // A moment is about one civ, so its steps follow that civ's ages. A play's
+  // steps only need some civ that can.
+  const civ = sh.kind === 'moment' ? momentCiv(sh.draft) : null;
+  const ages = (el: string): Age[] => (civ ? L.civAges(civ, el) : L.anyCivAges(el));
   const rows = d.builder.map((b, i) => {
-    const wrongAge = !L.elAges(b.el).includes(age);
+    const wrongAge = !ages(b.el).includes(age);
     const intentLabel = b.intent ? INTENT_NAME[b.intent] : 'Usual';
     return (
       <Fragment key={i + ':' + b.el}>
@@ -148,12 +153,13 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
           aria-label={'Intent: ' + intentLabel + '. Tap to change'}>
           <span className={'pill' + (b.intent ? '' : ' ghost')}>{intentLabel}</span>
         </button>
-        {wrongAge && <span className="pill warn" title={'Can\'t happen in ' + STAGE_NAME[age]}>Not {STAGE_NAME[age]}</span>}
+        {wrongAge && <span className="pill warn" title={civ ? L.blockText(civ, { el: b.el, age }) : 'No civ can do it in ' + STAGE_NAME[age] + ' yet'}>Not {civ ? L.civShort(civ) + ' in ' : ''}{STAGE_NAME[age]}</span>}
         <button type="button" className="icon-btn" data-act="pb-remove" data-i={i} aria-label={'Remove ' + L.elName(b.el)} onClick={() => { d.builder.splice(i, 1); emit(); }}>
           <Icon name="x" size={16} w={2} />
         </button>
       </div>
       <StepLandmark b={b} i={i} age={age} />
+      {wrongAge && <div className="step-sub">{civ ? <BlockList civ={civ} blocks={L.blockers(civ, 'el', b.el, age)} /> : <OpenStep el={b.el} age={age} />}</div>}
       </Fragment>
     );
   });
@@ -165,10 +171,10 @@ export function Builder({ sh, mode }: { sh: DefSheet | MomentSheet; mode: 'steps
           {g.items.map((e) => (
             <button key={e.id} type="button" className="item" data-act="pb-add" data-id={e.id} onClick={() => {
               // A moment's first element sets its age when the age it had can't happen.
-              if (mode === 'match' && !d.builder.length && !L.elAges(e.id).includes(d.age)) d.age = L.elAges(e.id)[0] || d.age;
+              if (mode === 'match' && !d.builder.length && !ages(e.id).includes(d.age)) d.age = ages(e.id)[0] || d.age;
               addStep(d.builder, e.id); sh.picking = false; emit();
             }}>
-              <SplitPill el={e.id} /><span className="sublabel">{agesText(L.elAges(e.id))}</span>
+              <SplitPill el={e.id} /><span className="sublabel">{civ && L.hasOwnAges(civ, e.id) ? L.civShort(civ) + ': ' + L.civAges(civ, e.id).map((a) => AGE_NAME[a]).join(', ') : L.agesNote(e.id)}</span>
             </button>
           ))}
         </div>

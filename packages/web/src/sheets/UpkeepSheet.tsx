@@ -1,8 +1,8 @@
 // Upkeep: recent changes with undo, duplicate checks, and a download.
-import { STAGE_NAME, ago, plural } from '@matchup-library/core';
+import { AGE_NAME, STAGE_NAME, ago, plural } from '@matchup-library/core';
 import { L, S, emit, openSheet, type MergeSheet as MergeSheetT } from '../store';
 import { downloadCopy, undoLast } from '../api/client';
-import { doMerge } from '../actions';
+import { addEarlyAges, doMerge } from '../actions';
 import { CloseBtn, SheetBack } from '../components/bits';
 
 export function UpkeepSheet() {
@@ -48,6 +48,19 @@ export function UpkeepSheet() {
           {!h.dupes.length && h.planDupes.length > 0 && <button type="button" className="btn" data-act="up-merge" onClick={() => openSheet({ kind: 'merge', what: 'plan', keep: null, back: S.sheet })}>Merge duplicate game plans</button>}
         </div>
       </section>
+      {h.early.length > 0 && (
+        <section className="block">
+          <h3 className="label">Earlier ages in the game data</h3>
+          <div className="panel">
+            <span className="hint">
+              The AoE4 World data has some civs doing these earlier than the library allows:{' '}
+              {h.early.slice(0, 10).map((x) => L.civShort(x.civ) + ' ' + L.elName(x.el) + ' from ' + AGE_NAME[x.age]).join(', ')}{h.early.length > 10 ? ', and ' + (h.early.length - 10) + ' more' : ''}.
+            </span>
+            <button type="button" className="btn" data-act="up-early" onClick={() => addEarlyAges(h.early)}>Add {h.early.length === 1 ? 'it' : 'all ' + h.early.length}</button>
+            <span className="hint">Each becomes that civ's own ages on the element, which you can change or take off in Library. The data only shows earlier starts reliably, so it never takes an age away.</span>
+          </div>
+        </section>
+      )}
       <section className="block">
         <h3 className="label">Your data</h3>
         <p className="hint">Everything in the library as one file, for safekeeping.</p>

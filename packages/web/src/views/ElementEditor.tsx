@@ -1,11 +1,11 @@
 // The Library's element editor and the "where it is used" pane. On a wide
 // screen they sit beside the element list; on a phone they replace it.
 import {
-  AGES, AGE_NAME, EL_TYPES, EL_TYPE_NAME, INTENTS, INTENT_NAME, STAGE_NAME, byName, isActive, plural, type DefType, type ElType, type Intent,
+  AGES, AGE_NAME, EL_TYPES, EL_TYPE_NAME, INTENTS, INTENT_NAME, STAGE_NAME, byName, isActive, plural, type Age, type DefType, type ElType, type Intent,
   type Place, type SubjectKind
 } from '@matchup-library/core';
 import { L, S, bind, emit, showToast, toggleIn, type DefDraft } from '../store';
-import { closeElement, openDef, revertElement, saveElement, toggleDefActive, elementDirty } from '../actions';
+import { closeElement, draftAgesWith, openDef, revertElement, saveElement, toggleDefActive, elementDirty } from '../actions';
 import { Flag } from '../components/Flag';
 import { MultiSelect, type MsOption } from '../components/pickers';
 import { Field } from '../components/bits';
@@ -117,6 +117,60 @@ function UniversalField({ id, d }: { id: string | null; d: DefDraft }) {
   );
 }
 
+// Civs whose ages differ from the usual ones. A civ listed here can do it in
+// exactly the ages ticked; every other civ uses the usual ages.
+function CivAgesField({ d }: { d: DefDraft }) {
+  const listed = Object.keys(d.civAges).sort((a, b) => L.civName(a, a).localeCompare(L.civName(b, b)));
+  const free = L.activeCivs().filter((c) => !(c.id in d.civAges) && !(d.universal && d.cannot.includes(c.id)));
+  const sj = L.subject(d.subject);
+  // The game data's earlier starts, against the ages in the editor rather than the saved ones.
+  const firstUsual = AGES.findIndex((a) => d.ages.includes(a));
+  const early = Object.entries((sj && sj.early) || {})
+    .map(([c, n]) => ({ civ: c, age: AGES[Number(n) - 1] as Age }))
+    .filter((x) => x.age && L.civ(x.civ) && isActive(L.civ(x.civ)) && AGES.indexOf(x.age) < firstUsual && !(d.civAges[x.civ] || []).includes(x.age) && !(d.universal && d.cannot.includes(x.civ)));
+  const toggle = (c: string, a: Age) => {
+    const now = d.civAges[c] || [];
+    const next = AGES.filter((x) => (x === a ? !now.includes(x) : now.includes(x)));
+    if (!next.length) { showToast('Keep at least one age on, or take ' + L.civShort(c) + ' off the list.', true); return; }
+    d.civAges[c] = next; emit();
+  };
+  return (
+    <div className="field">
+      <span className="label">Ages by civ</span>
+      {listed.map((c) => (
+        <div key={c} className="civage">
+          <span className="ca-who"><Flag id={c} /><span className="fw5">{L.civName(c, c)}</span></span>
+          <div className="tiles small" role="group" aria-label={'Ages for ' + L.civName(c, c)}>
+            {AGES.map((a) => <button key={a} type="button" data-act="df-civage" data-civ={c} data-v={a} aria-pressed={(d.civAges[c] || []).includes(a)} onClick={() => toggle(c, a)}>{AGE_NAME[a]}</button>)}
+          </div>
+          <button type="button" className="icon-btn" data-act="df-civage-remove" data-civ={c} aria-label={'Take ' + L.civName(c, c) + ' off, back to the usual ages'} onClick={() => { delete d.civAges[c]; emit(); }}>
+            <Icon name="x" size={16} w={2} />
+          </button>
+        </div>
+      ))}
+      {early.length > 0 && (
+        <div className="panel">
+          <span className="hint">The AoE4 World data has {early.map((x) => L.civShort(x.civ) + ' from ' + AGE_NAME[x.age]).join(', ')}.</span>
+          <div className="chiprow">
+            {early.map((x) => (
+              <button key={x.civ} type="button" className="btn btn-outline btn-sm" data-act="df-civage-early" data-civ={x.civ}
+                onClick={() => { d.civAges[x.civ] = draftAgesWith(d, x.civ, x.age); emit(); }}>Add {L.civShort(x.civ)} from {AGE_NAME[x.age]}</button>
+            ))}
+          </div>
+        </div>
+      )}
+      <select id="df-civage-add" className="select" aria-label="Add a civ whose ages differ" value=""
+        onChange={(e) => { const c = e.target.value; if (c) { d.civAges[c] = d.ages.slice(); emit(); } }}>
+        <option value="">{listed.length ? 'Add another civ' : 'Add a civ whose ages differ'}</option>
+        {free.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      <span className="hint">{listed.length
+        ? 'Each civ listed does it in exactly the ages ticked. Every other civ uses the ages above.'
+        : 'For a civ that does it in other ages, such as English men-at-arms in the Dark Age. Every other civ keeps the ages above.'}</span>
+    </div>
+  );
+}
+
 export function ElementPane() {
   const u = S.ui.library;
   const d = u.draft;
@@ -162,8 +216,9 @@ export function ElementPane() {
         <div className="tiles" role="group" aria-label="Ages it can happen in">
           {AGES.map((a) => <button key={a} type="button" data-act="df-age" data-v={a} aria-pressed={d.ages.includes(a)} onClick={() => toggleAge(a)}>{AGE_NAME[a]}</button>)}
         </div>
-        <span className="hint">Leave every age on unless you're sure it can't happen then.</span>
+        <span className="hint">Its usual ages. Leave every age on unless you're sure it can't happen then.</span>
       </div>
+      <CivAgesField d={d} />
       <Field id="df-desc" label="Description"><textarea id="df-desc" className="textarea" rows={2} placeholder="What it is" {...bind(d, 'description')} /></Field>
       <Field id="df-tells" label="Tells, for anyone doing it"><textarea id="df-tells" className="textarea" rows={2} placeholder="What you'd scout that gives it away" {...bind(d, 'tells')} /></Field>
       <WhereField d={d} />

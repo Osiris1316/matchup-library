@@ -7,7 +7,7 @@ import { CloseBtn } from '../components/bits';
 import { SplitPill, StepPills } from '../components/Pill';
 
 export function WhySheet({ sh }: { sh: WhySheetT }) {
-  const vp = parsePlace(S.ui.check.place);
+  const vp = parsePlace(sh.place ?? S.ui.check.place);
   const isEl = sh.itemKind === 'el';
   const def = L.itemDef(sh.itemKind, sh.id);
   if (!def) return null;

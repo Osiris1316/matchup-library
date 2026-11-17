@@ -35,13 +35,18 @@ export function fixture(): LibraryData {
         { id: 'tower', name: 'Tower', kind: 'structure', ages: ['dark', 'feudal', 'castle', 'imperial'], tells: '', description: '', where: [], whereNote: '', active: true, mergedInto: null,
           subject: 'outpost', intent: 'defensive', universal: true, cannot: ['rus'] },
         { id: 'castle', name: 'Naked castle', kind: 'age_tech', ages: ['feudal'], tells: '', description: '', where: [], whereNote: '', active: true, mergedInto: null,
-          subject: null, intent: null, universal: false, cannot: [] }
+          subject: null, intent: null, universal: false, cannot: [] },
+        // Usually Feudal on; Ottomans here may also make them in the Dark Age.
+        { id: 'maa', name: 'Men-at-arms', kind: 'unit', ages: ['feudal', 'castle', 'imperial'], tells: '', description: '', where: [], whereNote: '', active: true, mergedInto: null,
+          subject: 'man-at-arms', intent: 'offensive', universal: false, cannot: [], civAges: { ottomans: ['dark', 'feudal', 'castle', 'imperial'] } }
       ],
       plays: [
         { id: 'barracks_towers', name: 'Barracks into towers', age: 'dark', family: 'Barracks first', description: '', tells: '', notes: '', where: [], whereNote: '', active: true, mergedInto: null,
           steps: [{ el: 'barracks', age: 'dark', step: 1, notes: '' }, { el: 'towers', age: 'dark', step: 2, notes: '' }] },
         { id: 'nfc', name: 'Naked castle', age: 'feudal', family: 'Straight to Castle', description: '', tells: '', notes: '', where: [{ kind: 'type', id: 'open' }], whereNote: 'Open maps', active: true, mergedInto: null,
-          steps: [{ el: 'castle', age: 'feudal', step: 1, notes: '', subject: 'regnitz-cathedral' }] }
+          steps: [{ el: 'castle', age: 'feudal', step: 1, notes: '', subject: 'regnitz-cathedral' }] },
+        { id: 'dark_maa', name: 'Barracks into men-at-arms', age: 'dark', family: 'Barracks first', description: '', tells: '', notes: '', where: [], whereNote: '', active: true, mergedInto: null,
+          steps: [{ el: 'barracks', age: 'dark', step: 1, notes: '' }, { el: 'maa', age: 'dark', step: 2, notes: '' }] }
       ],
       gamePlans: [
         { id: 'towers_into_castle', name: 'Towers into naked castle', description: '', notes: '', status: null, where: [], whereNote: '', active: true, mergedInto: null,
@@ -69,7 +74,8 @@ export function fixture(): LibraryData {
       barracks: { id: 'barracks', name: 'Barracks', kind: 'building', age: 1, civs: null, icon: 'buildings/barracks-1.png', defaultIntent: null, active: true },
       outpost: { id: 'outpost', name: 'Outpost', kind: 'building', age: 1, civs: null, icon: 'buildings/outpost-1.png', defaultIntent: null, active: true },
       'burgrave-palace': { id: 'burgrave-palace', name: 'Burgrave Palace', kind: 'landmark', age: 2, civs: ['holy_roman_empire'], icon: 'buildings/burgrave-palace-2.png', defaultIntent: 'offensive', active: true },
-      'regnitz-cathedral': { id: 'regnitz-cathedral', name: 'Regnitz Cathedral', kind: 'landmark', age: 2, civs: ['holy_roman_empire'], icon: 'buildings/regnitz-cathedral-2.png', defaultIntent: null, active: true }
+      'regnitz-cathedral': { id: 'regnitz-cathedral', name: 'Regnitz Cathedral', kind: 'landmark', age: 2, civs: ['holy_roman_empire'], icon: 'buildings/regnitz-cathedral-2.png', defaultIntent: null, active: true },
+      'man-at-arms': { id: 'man-at-arms', name: 'Man-at-Arms', kind: 'unit', age: 1, civs: ['ottomans', 'rus'], icon: 'units/man-at-arms-1.png', defaultIntent: null, active: true, early: { rus: 1 } }
     },
     answers: {},
     settings: { lastPatch: '12.1' }

@@ -90,7 +90,8 @@ describe('game plans', () => {
     expect(L.planEvidence('rus', 'towers_into_castle', any).map((e) => e.kind)).toEqual(['tag']);
     expect(L.playEvidence('rus', 'nfc', any).map((e) => e.kind)).toEqual(['viaPlan']);
     expect(L.elementEvidence('rus', 'castle', any, 'feudal').map((e) => e.kind)).toEqual(['tag', 'viaPlan']);
-    expect(L.elementEvidence('rus', 'castle', any, 'dark').map((e) => e.kind)).toEqual(['tag']);
+    // Naked castle is a Feudal Age element, so Rus has nothing for it in the Dark Age.
+    expect(L.elementEvidence('rus', 'castle', any, 'dark')).toEqual([]);
     expect(L.evText(L.playEvidence('rus', 'nfc', any)[0]!, 'play')).toBe('Part of Towers into naked castle, tagged anywhere');
   });
   it('count from their stages when every stage\'s play is documented', () => {
@@ -147,6 +148,90 @@ describe('universal elements', () => {
     const data = fixture();
     delete data.tags.t4;
     expect(new Library(data).civElements('ottomans', any).map((x) => x.id)).not.toContain('tower');
+  });
+});
+
+describe('ages by civ', () => {
+  const L = new Library(fixture());
+  it('use a civ\'s own ages when it has some, else the element\'s usual ages', () => {
+    expect(L.civAges('ottomans', 'maa')).toEqual(['dark', 'feudal', 'castle', 'imperial']);
+    expect(L.civAges('rus', 'maa')).toEqual(['feudal', 'castle', 'imperial']);
+    expect(L.civAges('rus', 'tower')).toEqual([]);
+    expect(L.civCan('ottomans', 'maa', 'dark')).toBe(true);
+    expect(L.civCan('rus', 'maa', 'dark')).toBe(false);
+  });
+  it('allow a play step when any civ can do it in that age', () => {
+    expect(L.anyCivCan('maa', 'dark')).toBe(true);
+    expect(L.anyCivCan('castle', 'dark')).toBe(false);
+    expect(L.civsOpening('maa', 'dark')).toEqual(['ottomans']);
+    expect(L.agesNote('maa')).toBe('Feudal, Castle, Imperial · Ottomans from Dark');
+    expect(L.health().issues).toEqual([]);
+  });
+  it('check tags against their own civ', () => {
+    expect(L.blockers('ottomans', 'play', 'dark_maa')).toEqual([]);
+    expect(L.blockers('rus', 'play', 'dark_maa')).toEqual([{ el: 'maa', age: 'dark' }]);
+    expect(L.blockText('rus', { el: 'maa', age: 'dark' })).toBe("Men-at-arms isn't open to Rus in Dark Age");
+    expect(L.blockers('rus', 'el', 'maa', 'dark')).toEqual([{ el: 'maa', age: 'dark' }]);
+    expect(L.blockers('rus', 'el', 'tower')).toEqual([{ el: 'tower', age: null }]);
+    const data = fixture();
+    data.tags.bad = { civ: 'rus', el: null, play: 'dark_maa', plan: null, age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
+    data.tags.bad2 = { civ: 'rus', el: 'maa', play: null, plan: null, age: 'dark', place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
+    expect(new Library(data).health().issues).toEqual([
+      '1 step or tag uses an age its element no longer allows',
+      "1 tag gives a civ a play or game plan with a step it can't do in that age"
+    ]);
+  });
+  it('fill the ages between a new early age and the usual ones', () => {
+    expect(L.agesWith('rus', 'maa', 'dark')).toEqual(['dark', 'feudal', 'castle', 'imperial']);
+    const data = fixture();
+    data.defs.elements.find((e) => e.id === 'maa')!.ages = ['castle', 'imperial'];
+    expect(new Library(data).agesWith('rus', 'maa', 'dark')).toEqual(['dark', 'feudal', 'castle', 'imperial']);
+    expect(new Library(data).agesWith('rus', 'maa', 'feudal')).toEqual(['feudal', 'castle', 'imperial']);
+  });
+  it('offer the game data\'s earlier ages the library doesn\'t have yet', () => {
+    expect(L.earlyAges('maa')).toEqual([{ el: 'maa', civ: 'rus', age: 'dark', ages: ['dark', 'feudal', 'castle', 'imperial'] }]);
+    const data = fixture();
+    data.defs.elements.find((e) => e.id === 'maa')!.civAges!.rus = ['dark', 'feudal', 'castle', 'imperial'];
+    expect(new Library(data).earlyAges('maa')).toEqual([]);
+  });
+  it('keep a civ\'s evidence to the ages it can do the element in', () => {
+    const data = fixture();
+    data.tags.m = { civ: 'rus', el: 'maa', play: null, plan: null, age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
+    data.tags.o = { civ: 'ottomans', el: 'maa', play: null, plan: null, age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
+    const M = new Library(data);
+    expect(M.elementEvidence('rus', 'maa', any, 'feudal').map((e) => e.kind)).toEqual(['tag']);
+    expect(M.elementEvidence('rus', 'maa', any, 'dark')).toEqual([]);
+    // Ottomans can make them in the Dark Age and have a barracks tag; Rus can't.
+    expect(M.playEvidence('ottomans', 'dark_maa', any).map((e) => e.kind)).toEqual(['parts']);
+    expect(M.playEvidence('rus', 'dark_maa', any)).toEqual([]);
+  });
+});
+
+describe('civ stages', () => {
+  it('lay out a civ\'s plays by age and family, by evidence', () => {
+    const L = new Library(fixture());
+    const { columns, plans } = L.civStages('ottomans', dry);
+    const dark = columns[0]!;
+    expect(dark.age).toBe('dark');
+    // Barracks into towers from parts on Dry Arabia; Barracks into men-at-arms possible but not seen.
+    expect(dark.families.map((f) => [f.name, f.cards.map((c) => c.id + ':' + c.tier)])).toEqual([['Barracks first', ['barracks_towers:parts', 'dark_maa:open']]]);
+    expect(L.stageBadge(dark.families[0]!.cards[0]!)).toBe('From parts');
+    expect(plans).toEqual([]);
+  });
+  it('leave out plays a civ can\'t do in that age, and say what isn\'t open', () => {
+    const L = new Library(fixture());
+    const dark = L.civStages('rus', any).columns[0]!;
+    expect(dark.families.flatMap((f) => f.cards.map((c) => c.id + ':' + c.tier))).toEqual(['barracks_towers:documented']);
+    expect(L.stageBadge(dark.families[0]!.cards[0]!)).toBe('Tagged for some maps');
+    expect(dark.closed).toEqual(['Men-at-arms']);
+  });
+  it('list game plans: documented first, then those from their plays', () => {
+    const data = fixture();
+    data.tags.g = { civ: 'rus', el: null, play: null, plan: 'towers_into_castle', age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
+    const L = new Library(data);
+    expect(L.civStages('rus', any).plans.map((p) => p.id + ':' + p.tier)).toEqual(['towers_into_castle:documented']);
+    const feudal = L.civStages('rus', any).columns[1]!;
+    expect(feudal.families.flatMap((f) => f.cards.map((c) => L.stageBadge(c)))).toEqual(['Through a game plan']);
   });
 });
 

@@ -20,10 +20,11 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/api/src/auth.ts` | The Access token check. |
 | `packages/web/src/` | The page (React and Vite): `views/` for screens, `sheets/` for the pop-up sheets, `components/`, `styles/global.css`. |
 | `packages/web/src/components/Pill.tsx` | The split pill: an element's icon tile coloured by type, its name coloured by intent. |
+| `packages/web/src/views/CivStages.tsx` | A civ's stages: its plays per age, its game plans, and the path through a picked game plan. |
 | `packages/web/public/flags/` | Civ flags, from the league manager. |
 | `packages/web/public/icons/` | The aoe4world icons the library uses (see Credits). |
 | `scripts/import-preview.ts` | Turns a download (Upkeep, then Download a copy) into SQL for D1. |
-| `scripts/subjects.ts` | Loads units, buildings, landmarks and technologies from the aoe4world data repo, and copies the icons in use. |
+| `scripts/subjects.ts` | Loads units, buildings, landmarks and technologies from the aoe4world data repo, with the civs that get each one earlier than most, and copies the icons in use. |
 | `scripts/phase1-elements.ts` | One-off: moves the elements from before phase 1 onto types, icons and intent. |
 | `scripts/phase2-plays.ts` | One-off: splits the first version's plays into plays (one age each) and game plans. |
 | `scripts/backup-order.ts` | Reorders a `wrangler d1 export` file so it loads into an empty database. |
@@ -41,11 +42,32 @@ An element every civ can do, such as a tower or a second town centre, is marked 
 
 ## Plays and game plans
 
-A **play** is one age's steps in order, such as Barracks then Spears in the Dark Age. Every play has one age and a family, such as Barracks first or Straight to Castle, which groups it in the Library. A step has to be possible in the play's age.
+A **play** is one age's steps in order, such as Barracks then Spears in the Dark Age. Every play has one age and a family, such as Barracks first or Straight to Castle, which groups it in the Library. A step has to be possible in the play's age for at least one civ (see Ages by civ).
 
 A **game plan** is one play for each age: how a game goes from the start into Castle. Each age it covers is a **stage**, with its own notes on how the play is run there. The same play can sit in many game plans.
 
 Tags and references work with all three: an element, a play or a game plan. Evidence flows down, so a civ tagged with a game plan counts for each of its plays, and each play counts for its elements in that play's age. A moment in a game or guide is either a whole game plan, or steps in one age: one element, or several, which match a saved play or become a new one.
+
+## Ages by civ
+
+An element has its usual ages. A civ can differ: English make men-at-arms in the Dark Age, Mongols make horsemen there. In the element editor, under **Ages by civ**, list the civs that differ and tick their ages. A civ listed there does it in exactly those ages; every other civ keeps the usual ones. They're stored one row per civ, element and age in `civ_element_ages`.
+
+The rule that follows:
+
+- A play step is allowed when any civ can do it in the play's age.
+- A tag is checked against its own civ. An element tag offers only that civ's ages, and a play or game plan tag needs the civ to be able to do every step in its age.
+- A moment follows the civ it's about: the side that did it in a game, or the guide's civ.
+- Check, the civ stages page, Upkeep and the `v_health` view use the same rule.
+
+When something is blocked, the message says what's wrong, with a button that fixes it where it can: **Allow for HRE** gives that civ the age (and every age from there up to the usual ones). It's saved like any edit and can be undone.
+
+The aoe4world data lists, for some units and buildings, the civs that get them earlier than most (`subjects.early_ages`, loaded by `pnpm subjects sql`). The element editor offers these as **Add English from Dark**, and Upkeep offers all of them at once. They are suggestions only: the data's later versions are upgrade tiers, not when a civ can first make something, so it only ever adds earlier ages.
+
+## A civ's stages
+
+A civ's page opens on **Stages**, built for a wide screen: the civ's plays in columns for Dark, Feudal and early Castle, grouped by family, and its game plans underneath. A card's outline shows the evidence: solid for tagged, seen in a game or guide, or standard (every step is something every civ does); dashed for from parts (each step documented, never seen together); faint dashed for not seen (possible, nothing documented). Plays the civ can't do in that age are left out, and each column says which elements aren't open to the civ there.
+
+Pick a game plan to light up its plays and draw the path between them; pick a play to see which game plans use it. The map filter works as in Check. **Tags** has the tag lists as before. On a phone the ages stack and the path isn't drawn.
 
 ## Deploy
 

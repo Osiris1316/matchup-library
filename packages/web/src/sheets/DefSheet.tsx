@@ -1,22 +1,26 @@
 // Edit or add a definition: play, game plan, kind, feature, map, map type or civ.
 // Elements are edited beside the list in the Library (views/ElementEditor.tsx),
 // which reuses the civ, "comes up on" and references fields from here.
-import { STAGE_AGES, STAGE_NAME, byName, guideTitle, isActive, parsePlace, placeKey, tagField, tagTargetId, type Age, type ItemKind, type PlanStatus } from '@matchup-library/core';
+import { AGE_NAME, STAGE_AGES, STAGE_NAME, byName, guideTitle, isActive, parsePlace, placeKey, tagField, tagTargetId, type Age, type Block, type ItemKind, type PlanStatus } from '@matchup-library/core';
 import { L, S, bind, emit, toggleIn, type DefDraft, type DefSheet as DefSheetT } from '../store';
-import { DEF_WORD, openDef, saveDef, toggleDefActive } from '../actions';
+import { DEF_WORD, draftBlockers, openDef, saveDef, toggleDefActive } from '../actions';
+import { BlockList } from '../components/Blocks';
 import { Flag } from '../components/Flag';
 import { AgeSeg, Builder, MultiSelect, type MsOption } from '../components/pickers';
 import { CloseBtn, Field, Seg } from '../components/bits';
 import { StepPills } from '../components/Pill';
 import { GameTitle } from '../views/RefsView';
 
-// Which civs do it: ticking one tags it anywhere.
-export function CivChips({ field, id, d }: { field: ItemKind; id: string | null; d: DefDraft }) {
+// Which civs do it: ticking one tags it anywhere. blocksFor says what a civ
+// can't do in it (a play's or game plan's steps), as the sheet stands.
+export function CivChips({ field, id, d, blocksFor }: { field: ItemKind; id: string | null; d: DefDraft; blocksFor?: (civ: string) => Block[] }) {
   const states: Record<string, 'on' | 'some'> = {};
   if (id) L.activeTags().filter((t) => tagField(t) === field && tagTargetId(t) === id).forEach((t) => { states[t.civ] = placeKey(t.place) === 'any:' ? 'on' : states[t.civ] || 'some'; });
   const civs = L.activeCivs();
+  const blocks = new Map(civs.map((c) => [c.id, blocksFor ? blocksFor(c.id) : []] as const));
+  const cant = (c: string) => { const b = blocks.get(c)?.[0]; return b ? (b.age ? "Can't: " + L.elName(b.el) + ' in ' + AGE_NAME[b.age] : "Can't: " + L.elName(b.el)) : ''; };
   const opt = (c: (typeof civs)[number], group: string): MsOption => ({ group, value: c.id, label: c.name, short: c.short || c.name, flag: <Flag id={c.id} />,
-    sub: !d.civOn.includes(c.id) && states[c.id] === 'some' ? 'Tagged only for some maps' : '' });
+    sub: cant(c.id) || (!d.civOn.includes(c.id) && states[c.id] === 'some' ? 'Tagged only for some maps' : '') });
   const options = [...civs.filter((c) => !c.parent).map((c) => opt(c, 'Civs')), ...civs.filter((c) => c.parent).map((c) => opt(c, 'Variants'))];
   const some = civs.filter((c) => !d.civOn.includes(c.id) && states[c.id] === 'some');
   return (
@@ -24,6 +28,7 @@ export function CivChips({ field, id, d }: { field: ItemKind; id: string | null;
       <MultiSelect msKey="civOn" label={field === 'el' ? 'Civs that do it' : 'Civs that run it'} options={options} selected={d.civOn} none="No civs yet"
         hint="Ticking a civ tags it anywhere. Add timing, tells or map limits on the civ page." onToggle={(v, on) => { d.civOn = toggleIn(d.civOn, v, on); }} />
       {some.length > 0 && <span className="hint">Also tagged only for some maps: {some.map((c) => c.short || c.name).join(', ')}.</span>}
+      {d.civOn.filter((c) => (blocks.get(c) || []).length).map((c) => <BlockList key={c} civ={c} blocks={blocks.get(c) || []} />)}
     </>
   );
 }
@@ -115,7 +120,7 @@ export function DefSheet({ sh }: { sh: DefSheetT }) {
     const steps = <><div className="field"><span className="label">Age</span><AgeSeg act="df-age" value={d.age} onPick={(a) => { d.age = a; emit(); }} /></div><Builder sh={sh} mode="steps" /></>;
     const usedBy = it ? L.activePlans().filter((g) => STAGE_AGES.some((a) => g.stages[a]?.play === it.id)) : [];
     body = <>
-      {it ? <><CivChips field="play" id={sh.id} d={d} />{steps}</> : <>{steps}<CivChips field="play" id={sh.id} d={d} /></>}
+      {it ? <><CivChips field="play" id={sh.id} d={d} blocksFor={(c) => draftBlockers('plays', d, c)} />{steps}</> : <>{steps}<CivChips field="play" id={sh.id} d={d} blocksFor={(c) => draftBlockers('plays', d, c)} /></>}
       <Field id="df-family" label="Family">
         <input id="df-family" className="input" type="text" list="df-families" autoComplete="off" placeholder="Picked from the steps when left empty" {...bind(d, 'family')} />
         <datalist id="df-families">{fams.map((f) => <option key={f} value={f} />)}</datalist>
@@ -129,7 +134,7 @@ export function DefSheet({ sh }: { sh: DefSheetT }) {
   } else if (t === 'gamePlans') {
     body = <>
       {STAGE_AGES.map((a) => <StageField key={a} sh={sh} age={a} />)}
-      <CivChips field="plan" id={sh.id} d={d} />
+      <CivChips field="plan" id={sh.id} d={d} blocksFor={(c) => draftBlockers('gamePlans', d, c)} />
       <div className="field"><span className="label">Status</span><Seg label="Status" act="df-status" options={STATUS} current={d.status} onPick={(v) => { d.status = v; emit(); }} /></div>
       {desc('What the game plan is going for')}
       <Field id="df-notes" label="Notes"><textarea id="df-notes" className="textarea" rows={2} {...bind(d, 'notes')} /></Field>

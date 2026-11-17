@@ -16,6 +16,7 @@ export interface DefDraft {
   name: string; description: string;
   kind: string; ages: Age[]; tells: string;                   // elements
   subject: string; intent: Intent | ''; universal: boolean; cannot: string[];
+  civAges: Record<string, Age[]>;                             // civs whose ages differ
   builder: BuilderRow[]; age: Age; family: string;           // plays
   stages: Partial<Record<Age, { play: string; notes: string }>>; status: PlanStatus | ''; // game plans
   where: Place[]; whereNote: string; civOn: string[];         // elements, plays and game plans
@@ -47,7 +48,8 @@ interface SheetBase { sid: number; back?: Sheet | null; open?: string | null }
 export type DefSheet = SheetBase & { kind: 'def'; type: DefType; id: string | null; draft: DefDraft; picking: boolean; stageFor?: Age | null };
 export type TagSheet = SheetBase & { kind: 'tag'; draft: TagDraft };
 export type BulkSheet = SheetBase & { kind: 'bulk'; draft: BulkDraft };
-export type WhySheet = SheetBase & { kind: 'why'; itemKind: ItemKind; id: string; civ: string };
+// place: the map being viewed, as a place key; Check's map when not given.
+export type WhySheet = SheetBase & { kind: 'why'; itemKind: ItemKind; id: string; civ: string; place?: string };
 export type UpkeepSheet = SheetBase & { kind: 'upkeep' };
 export type MergeSheet = SheetBase & { kind: 'merge'; what: 'play' | 'plan'; keep: string | null };
 export type RefSheet = SheetBase & { kind: 'refdet'; draft: RefDraft };
@@ -60,6 +62,9 @@ export type LibrarySeg = 'elements' | 'plays' | 'gamePlans' | 'landmarks';
 export type MapsSeg = 'maps' | 'features' | 'mapTypes';
 export type CheckSeg = 'plans' | 'plays' | 'elements' | 'mine';
 export type RefsSeg = 'all' | 'mine' | 'games' | 'guides';
+export type CivTab = 'stages' | 'tags';
+// What's picked on the civ stages page: one play, or a game plan and its plays.
+export type CivSel = { kind: 'play' | 'plan'; id: string };
 
 export const S = {
   dbState: 'connecting' as DbState,
@@ -74,7 +79,8 @@ export const S = {
     // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
     library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
     civs: { showRetired: false },
-    civ: { showRetired: false },
+    // sel belongs to the civ in selFor; another civ's page starts with nothing picked.
+    civ: { showRetired: false, tab: 'stages' as CivTab, sel: null as CivSel | null, selFor: '', place: 'any:', showParts: false, showOpen: true },
     maps: { seg: 'maps' as MapsSeg, showRetired: false },
     check: { me: 'chinese', opp: 'ottomans', place: 'any:', seg: 'plays' as CheckSeg, showElsewhere: false },
     refs: { seg: 'all' as RefsSeg, url: '' }
@@ -125,8 +131,10 @@ export function showToast(text: string, warn = false, undoId: string | null = nu
 const PREFS = 'matchup-library-prefs-v2';
 export function loadPrefs(): void {
   try {
-    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; lastView?: string; ref?: typeof S.refDefaults };
+    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; lastView?: string; ref?: typeof S.refDefaults };
     if (p.check) Object.assign(S.ui.check, p.check);
+    if (p.civ && (p.civ.tab === 'stages' || p.civ.tab === 'tags')) S.ui.civ.tab = p.civ.tab;
+    if (p.civ && typeof p.civ.showOpen === 'boolean') S.ui.civ.showOpen = p.civ.showOpen;
     if (p.lastView) S.lastView = p.lastView;
     if (p.ref) S.refDefaults = p.ref;
   } catch { /* storage unavailable */ }
@@ -134,7 +142,8 @@ export function loadPrefs(): void {
 export function savePrefs(): void {
   try {
     const c = S.ui.check;
-    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, lastView: S.view.startsWith('ref-') ? 'refs' : S.view, ref: S.refDefaults }));
+    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen },
+      lastView: S.view.startsWith('ref-') ? 'refs' : S.view, ref: S.refDefaults }));
   } catch { /* storage unavailable */ }
 }
 

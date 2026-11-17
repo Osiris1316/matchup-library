@@ -7,7 +7,7 @@
 //   plan  a game plan: one play per age, Dark through early Castle
 // Evidence flows downward: a tag on a game plan documents each of its plays,
 // and a tag on a play documents each of its elements in that play's age.
-import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, STAGE_NAME, type Age, type Civ, type ElType, type Element, type Feature, type Game,
+import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, STAGE_AGES, STAGE_NAME, type Age, type Civ, type ElType, type Element, type Feature, type Game,
   type GamePlan, type GamePlay, type Intent, type Kind, type LibraryData, type Link, type MapDef, type MapType, type Mark, type Place, type PlaceKind,
   type Play, type Stage, type Step, type Subject, type Tag, type UseLook } from './types';
 import { byName, cap, fmtDate, fmtTime, hostOf, lowerFirst, plural, slug } from './text';
@@ -40,8 +40,36 @@ export interface Look {
   el: string; name: string; title: string; type: ElType | null; intent: Intent | null;
   subject: Subject | null; icon: string | null; landmark: boolean;
 }
+// Something a civ can't do: an element in an age, or (age null) at all.
+export interface Block { el: string; age: Age | null }
+// An earlier age the aoe4world data gives a civ, and the ages it would have with it.
+export interface EarlyAge { el: string; civ: string; age: Age; ages: Age[] }
+// The civ stages page: each age's plays for one civ, grouped by family.
+//   documented  tagged, part of a tagged game plan, or seen in a game or guide
+//   standard    every step is something every civ does
+//   parts       every step documented for this civ, never seen together
+//   open        possible for this civ, nothing documented
+export type StageTier = 'documented' | 'standard' | 'parts' | 'open';
+export interface StageCard { id: string; tier: StageTier; ev: Evidence[]; blocked: Block[] }
+export interface StageColumn { age: Age; families: { name: string; cards: StageCard[] }[]; count: number; closed: string[] }
+export interface StagePlan { id: string; ev: Evidence[]; tier: 'documented' | 'parts' }
+// Families in the order the stages page shows them; others follow by name.
+export const FAMILY_ORDER: Partial<Record<Age, string[]>> = {
+  dark: ['Tech', 'Eco openings', 'Barracks first', 'Towers first'],
+  feudal: ['Straight to Castle', 'Second TC first', 'Army first'],
+  castle: ['Follow-ups']
+};
+const TIER_ORDER: StageTier[] = ['documented', 'standard', 'parts', 'open'];
+const ANY_PLACE: Place = { kind: 'any' };
 
 export const isActive = (x: { active?: boolean } | null | undefined): boolean => !!x && x.active !== false;
+// A civ's ages with one more: the ages it has now, the new one, and every age
+// from there up to where the usual ages begin.
+export function agesFrom(now: Age[], usual: Age[], age: Age): Age[] {
+  const from = AGES.indexOf(age);
+  const firstUsual = AGES.findIndex((a) => usual.includes(a));
+  return AGES.filter((a, i) => now.includes(a) || a === age || (i > from && i < firstUsual));
+}
 export const placeKey = (p: { kind: PlaceKind; id?: string | null } | null | undefined): string => (p && p.kind !== 'any' ? p.kind + ':' + (p.id || '') : 'any:');
 export function parsePlace(key: string): Place {
   const [k, id] = String(key || 'any:').split(':');
@@ -139,6 +167,106 @@ export class Library {
   }
   isUniversal(id: string | null | undefined): boolean { const e = this.el(id); return !!e && !!e.universal; }
   cannot(civId: string, elId: string): boolean { const e = this.el(elId); return !!e && (e.cannot || []).includes(civId); }
+
+  // -------------------------------------------------------------- ages by civ
+  // The ages a civ can do an element in: none when it's listed as a civ that
+  // can't, its own ages when it has some, else the element's usual ages.
+  civAges(civId: string, elId: string | null | undefined): Age[] {
+    const e = this.el(elId);
+    if (!e) return AGES;
+    if ((e.cannot || []).includes(civId)) return [];
+    const own = e.civAges && e.civAges[civId];
+    return own ? AGES.filter((a) => own.includes(a)) : this.elAges(elId);
+  }
+  hasOwnAges(civId: string, elId: string | null | undefined): boolean { const e = this.el(elId); return !!e && !!e.civAges && !!e.civAges[civId]; }
+  civCan(civId: string, elId: string, age: Age): boolean { return this.civAges(civId, elId).includes(age); }
+  // A play step is allowed when any civ can do the element in the play's age.
+  anyCivCan(elId: string, age: Age): boolean {
+    if (this.elAges(elId).includes(age)) return true;
+    const e = this.el(elId);
+    return !!e && Object.values(e.civAges || {}).some((ages) => ages.includes(age));
+  }
+  anyCivAges(elId: string): Age[] { return AGES.filter((a) => this.anyCivCan(elId, a)); }
+  // The civs whose own ages open an age the element usually lacks.
+  civsOpening(elId: string, age: Age): string[] {
+    const e = this.el(elId);
+    if (!e || this.elAges(elId).includes(age)) return [];
+    return Object.entries(e.civAges || {}).filter(([, ages]) => ages.includes(age)).map(([c]) => c).sort((a, b) => this.civName(a, a).localeCompare(this.civName(b, b)));
+  }
+  // "Feudal, Castle, Imperial · English from Dark": the usual ages, and civs that differ.
+  agesNote(elId: string): string {
+    const e = this.el(elId);
+    const usual = this.elAges(elId);
+    const diff = Object.entries((e && e.civAges) || {}).map(([c, ages]) => {
+      const first = ages[0];
+      if (first && AGES.indexOf(first) < AGES.indexOf(usual[0] as Age)) return this.civShort(c) + ' from ' + AGE_NAME[first];
+      return this.civShort(c) + ': ' + (ages.length ? ages.map((a) => AGE_NAME[a]).join(', ') : 'none');
+    });
+    const base = usual.length === 4 ? 'Any age' : usual.length === 1 ? AGE_NAME[usual[0] as Age] + ' only' : usual.map((a) => AGE_NAME[a]).join(', ');
+    return base + (diff.length ? ' · ' + diff.join(', ') : '');
+  }
+  // The ages a civ would have with one more: its ages now, the new one, and
+  // every age from there up to where the element's usual ages begin.
+  agesWith(civId: string, elId: string, age: Age): Age[] {
+    const usual = this.elAges(elId);
+    return agesFrom(this.cannot(civId, elId) ? usual : this.civAges(civId, elId), usual, age);
+  }
+  // What a civ can't do among some steps, all in one age.
+  cantDo(civId: string, steps: Step[], age: Age): Block[] {
+    const out: Block[] = [];
+    sortedSteps(steps).forEach((st) => {
+      if (!this.civCan(civId, st.el, age) && !out.some((b) => b.el === st.el && b.age === age)) out.push({ el: st.el, age: this.civAges(civId, st.el).length ? age : null });
+    });
+    return out;
+  }
+  // What stops a civ being tagged with an element (in an age), a play, or a game plan.
+  blockers(civId: string, field: ItemKind, id: string, age: Age | null = null): Block[] {
+    if (field === 'el') {
+      const ages = this.civAges(civId, id);
+      if (!ages.length) return [{ el: id, age: null }];
+      return age && !ages.includes(age) ? [{ el: id, age }] : [];
+    }
+    if (field === 'play') { const p = this.play(id); return p ? this.cantDo(civId, p.steps, p.age) : []; }
+    const out: Block[] = [];
+    stagesOf(this.plan(id)).forEach(({ stage }) => {
+      const p = this.play(stage.play);
+      if (p) this.cantDo(civId, p.steps, p.age).forEach((b) => { if (!out.some((x) => x.el === b.el && x.age === b.age)) out.push(b); });
+    });
+    return out;
+  }
+  // "Men-at-arms isn't open to HRE in Dark Age."
+  blockText(civId: string, b: Block): string {
+    return b.age ? this.elName(b.el) + " isn't open to " + this.civShort(civId) + ' in ' + STAGE_NAME[b.age]
+      : this.civShort(civId) + " is listed as a civ that can't do " + this.elName(b.el);
+  }
+  // Earlier ages the aoe4world data gives civs, that this library doesn't have yet.
+  earlyAges(elId: string): EarlyAge[] {
+    const e = this.el(elId);
+    const sj = e && isActive(e) ? this.subject(e.subject) : null;
+    if (!e || !sj || !sj.early) return [];
+    const out: EarlyAge[] = [];
+    Object.entries(sj.early).forEach(([c, n]) => {
+      const a = AGES[Number(n) - 1];
+      if (!a || !isActive(this.civ(c)) || this.cannot(c, elId) || this.civCan(c, elId, a)) return;
+      out.push({ el: elId, civ: c, age: a, ages: this.agesWith(c, elId, a) });
+    });
+    return out.sort((x, y) => this.civName(x.civ).localeCompare(this.civName(y.civ)));
+  }
+  allEarlyAges(): EarlyAge[] { return this.data.defs.elements.filter(isActive).flatMap((e) => this.earlyAges(e.id)); }
+  // Whether this civ plausibly has the element at all: the game data's civ
+  // list for its subject, unless the library says otherwise (its own ages, a
+  // tag, a game or a guide). Only used to keep "not seen" plays believable.
+  civMayHave(civId: string, elId: string): boolean {
+    const e = this.el(elId);
+    if (!e) return false;
+    if (this.cannot(civId, elId)) return false;
+    if (e.universal || (e.civAges && e.civAges[civId])) return true;
+    const sj = this.subject(e.subject);
+    if (!sj || !sj.civs || sj.kind === 'landmark') return true;
+    const parent = (this.civ(civId) || { parent: null }).parent;
+    if (sj.civs.includes(civId) || (!!parent && sj.civs.includes(parent))) return true;
+    return this.elementEvidence(civId, elId, ANY_PLACE, null).some((x) => x.kind !== 'universal');
+  }
   // An age-up rather than a technology: an age-up or tech element with no subject, or a landmark.
   isAgeUp(elId: string | null | undefined): boolean {
     if (this.elType(elId) !== 'age_tech') return false;
@@ -338,8 +466,10 @@ export class Library {
   // intent narrows the match when a play step asks for a particular use.
   // A universal element counts for every civ that can do it, in its default
   // intent; a different use (towers used offensively, say) still needs a tag.
+  // A civ that can't do the element in that age has no evidence for it there.
   elementEvidence(civId: string, elId: string, vp: Place, age: Age | null, intent: Intent | null = null): Evidence[] {
     const out: Evidence[] = [];
+    if (age && !this.civCan(civId, elId, age)) return out;
     const fits = (use: UseLook | null | undefined) => fitsIntent(intent, this.useIntent(elId, use));
     const hit = (x: Target) => (x.elementId ? x.elementId === elId && fitsAge(x.age, age) && fits(x)
       : x.playId ? this.playHasEl(x.playId, elId, age, intent) : !!x.planId && this.planHasEl(x.planId, elId, age, intent));
@@ -470,7 +600,7 @@ export class Library {
   }
 
   // -------------------------------------------------------------- upkeep checks
-  health(): { dupes: Play[][]; planDupes: GamePlan[][]; issues: string[] } {
+  health(): { dupes: Play[][]; planDupes: GamePlan[][]; issues: string[]; early: EarlyAge[] } {
     const issues: string[] = [];
     const groupBy = <T>(items: T[], key: (x: T) => string): T[][] => {
       const g: Record<string, T[]> = {};
@@ -479,10 +609,11 @@ export class Library {
     };
     const dupes = groupBy(this.activePlays().filter((p) => p.steps.length), (p) => this.playSignature(p));
     const planDupes = groupBy(this.activePlans().filter((g) => stagesOf(g).length), (g) => this.planSignature(g));
-    const ageBad = (elId: string, age: Age | null) => !!age && !this.elAges(elId).includes(age);
+    // The age rule: a play step needs some civ that can; a tag needs its own civ to.
     let ageConflicts = 0;
-    this.activePlays().forEach((p) => p.steps.forEach((st) => { if (ageBad(st.el, p.age)) ageConflicts += 1; }));
-    this.activeTags().forEach((t) => { if (t.el && ageBad(t.el, t.age)) ageConflicts += 1; });
+    this.activePlays().forEach((p) => p.steps.forEach((st) => { if (!this.anyCivCan(st.el, p.age)) ageConflicts += 1; }));
+    this.activeTags().forEach((t) => { if (t.el && !t.play && !t.plan && t.age && !this.civCan(t.civ, t.el, t.age)) ageConflicts += 1; });
+    const civConflicts = this.activeTags().filter((t) => (t.play || t.plan) && this.tagTargetActive(t) && this.blockers(t.civ, tagField(t), tagTargetId(t)).length).length;
     let wrongStage = 0;
     this.activePlans().forEach((g) => stagesOf(g).forEach(({ age, stage }) => { const p = this.play(stage.play); if (p && p.age !== age) wrongStage += 1; }));
     const mergedPlays = new Set(this.data.defs.plays.filter((p) => p.mergedInto).map((p) => p.id));
@@ -492,11 +623,73 @@ export class Library {
       + this.activeTags().filter((t) => (t.play && mergedPlays.has(t.play)) || (t.plan && mergedPlans.has(t.plan))).length
       + this.activePlans().reduce((n, g) => n + stagesOf(g).filter(({ stage }) => mergedPlays.has(stage.play)).length, 0);
     if (ageConflicts) issues.push(plural(ageConflicts, 'step or tag uses an age its element no longer allows', 'steps or tags use ages their elements no longer allow'));
+    if (civConflicts) issues.push(plural(civConflicts, 'tag gives a civ a play or game plan with a step it can\'t do in that age', 'tags give civs plays or game plans with steps they can\'t do in that age'));
     if (wrongStage) issues.push(plural(wrongStage, 'game plan stage holds a play from another age', 'game plan stages hold plays from other ages'));
     if (mergedRefs) issues.push(plural(mergedRefs, 'record still points at something merged', 'records still point at merged plays or game plans'));
     const untyped = this.data.defs.elements.filter((e) => isActive(e) && !this.elType(e.id)).length;
     if (untyped) issues.push(plural(untyped, 'element has no type yet', 'elements have no type yet') + ' (unit, structure, economy, or age-up or tech)');
-    return { dupes, planDupes, issues };
+    return { dupes, planDupes, issues, early: this.allEarlyAges() };
+  }
+
+  // -------------------------------------------------------------- the civ stages page
+  // One civ's plays per age, grouped by family, and its game plans. A play
+  // the civ can't do in its age is left out, unless something documents it.
+  civStages(civId: string, vp: Place): { columns: StageColumn[]; plans: StagePlan[] } {
+    const columns = STAGE_AGES.map((age): StageColumn => {
+      const cards: (StageCard & { family: string })[] = [];
+      this.activePlays(age).forEach((p) => {
+        if (!p.steps.length) return;
+        const ev = this.playEvidence(civId, p.id, vp);
+        const blocked = this.cantDo(civId, p.steps, age);
+        let tier: StageTier | null = null;
+        if (ev.some((e) => e.kind === 'tag' || e.kind === 'viaPlan' || e.kind === 'game' || e.kind === 'guide')) tier = 'documented';
+        else if (blocked.length) tier = null;
+        else if (ev.some((e) => e.kind === 'parts')) {
+          const parts = ev.find((e) => e.kind === 'parts');
+          tier = parts && parts.kind === 'parts' && parts.parts.every((x) => x.ev.every((e) => e.kind === 'universal')) ? 'standard' : 'parts';
+        } else if (p.steps.every((st) => this.civMayHave(civId, st.el))) tier = 'open';
+        if (tier) cards.push({ id: p.id, tier, ev: ev.sort((a, b) => a.rank - b.rank), blocked, family: p.family || 'Other' });
+      });
+      const order = FAMILY_ORDER[age] || [];
+      const names = [...new Set(cards.map((c) => c.family))].sort((a, b) => {
+        const ia = order.indexOf(a), ib = order.indexOf(b);
+        if (ia >= 0 || ib >= 0) return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        return a === 'Other' ? 1 : b === 'Other' ? -1 : a.localeCompare(b);
+      });
+      const families = names.map((name) => ({
+        name,
+        cards: cards.filter((c) => c.family === name)
+          .sort((a, b) => TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier) || this.playTitle(a.id).localeCompare(this.playTitle(b.id)))
+          .map(({ family: _f, ...c }) => c)
+      }));
+      // Elements in this age's plays that some civ can do here, but not this one.
+      const used = [...new Set(this.activePlays(age).flatMap((p) => p.steps.map((st) => st.el)))];
+      const closed = used.filter((el) => isActive(this.el(el)) && this.anyCivCan(el, age) && (!this.civCan(civId, el, age) || !this.civMayHave(civId, el)))
+        .map((el) => this.elName(el)).sort((a, b) => a.localeCompare(b));
+      return { age, families, count: cards.length, closed };
+    });
+    const plans: StagePlan[] = this.activePlans().map((g) => ({ id: g.id, ev: this.planEvidence(civId, g.id, vp).sort((a, b) => a.rank - b.rank) }))
+      .filter((x) => x.ev.length)
+      .map((x) => ({ ...x, tier: x.ev.some((e) => e.kind !== 'stages') ? 'documented' as const : 'parts' as const }))
+      .sort((a, b) => (a.tier === b.tier ? 0 : a.tier === 'documented' ? -1 : 1) || minRank(a.ev) - minRank(b.ev) || this.planTitle(a.id).localeCompare(this.planTitle(b.id)));
+    return { columns, plans };
+  }
+  // A card's evidence in a few words: "Tagged · 2 games", "From parts", "Not seen".
+  stageBadge(card: StageCard): string {
+    if (card.tier === 'standard') return 'Standard';
+    if (card.tier === 'parts') return 'From parts';
+    if (card.tier === 'open') return 'Not seen';
+    const ev = card.ev;
+    const words: string[] = [];
+    const tags = ev.filter((e) => e.kind === 'tag');
+    if (tags.some((e) => e.kind === 'tag' && e.rel !== 'narrower')) words.push('Tagged');
+    else if (tags.length) words.push('Tagged for some maps');
+    else if (ev.some((e) => e.kind === 'viaPlan')) words.push('Through a game plan');
+    const games = new Set(ev.flatMap((e) => (e.kind === 'game' ? [e.gid] : []))).size;
+    if (games) words.push(plural(games, 'game'));
+    if (ev.some((e) => e.kind === 'guide')) words.push(words.length ? 'guide' : 'In a guide');
+    if (words[0] && /^\d/.test(words[0])) words[0] = 'In ' + words[0];
+    return words.join(' · ');
   }
 
   // -------------------------------------------------------------- references

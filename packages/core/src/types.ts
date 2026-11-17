@@ -26,6 +26,8 @@ export type SubjectKind = 'unit' | 'building' | 'landmark' | 'technology';
 export interface Subject {
   id: string; name: string; kind: SubjectKind; age: number | null; civs: string[] | null; icon: string | null;
   defaultIntent: Intent | null; active: boolean;
+  // Civs that get it earlier than most, by the aoe4world data: civ id to age 1 to 4.
+  early?: Record<string, number> | null;
 }
 // The overrides every use of an element can carry.
 export interface UseLook { intent?: Intent | null; subject?: string | null }
@@ -47,6 +49,8 @@ export interface Element {
   subject?: string | null; intent?: Intent | null;
   universal?: boolean;            // every civ can do it; cannot lists the exceptions
   cannot?: string[];
+  // Civs whose ages differ from the usual ones: exactly these ages for that civ.
+  civAges?: Record<string, Age[]>;
 }
 // One element of a play. Same step = at the same time; a higher step comes later.
 // In a play every step's age is the play's age.

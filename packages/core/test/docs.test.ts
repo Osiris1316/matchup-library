@@ -68,8 +68,8 @@ describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
     db.exec('PRAGMA foreign_keys = ON');
     const ex = fixture();
     // Subjects come from the seed script, not from the page.
-    Object.values(ex.subjects || {}).forEach((x) => db.prepare('INSERT INTO subjects (id, name, kind, min_age, civs, icon, default_intent, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, 1)')
-      .run(x.id, x.name, x.kind, x.age, x.civs ? JSON.stringify(x.civs) : null, x.icon, x.defaultIntent));
+    Object.values(ex.subjects || {}).forEach((x) => db.prepare('INSERT INTO subjects (id, name, kind, min_age, civs, icon, default_intent, is_active, early_ages) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?)')
+      .run(x.id, x.name, x.kind, x.age, x.civs ? JSON.stringify(x.civs) : null, x.icon, x.defaultIntent, x.early ? JSON.stringify(x.early) : null));
     const writes: { path: string; data: unknown }[] = [];
     DEF_TYPES.forEach((t) => writes.push({ path: 'defs/' + t, data: { items: ex.defs[t] } }));
     writes.push({ path: 'meta/settings', data: ex.settings });
@@ -88,5 +88,12 @@ describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
     expect(strip(st.tags)).toEqual(strip(ex.tags));
     expect(strip(st.games)).toEqual(strip(ex.games));
     expect(strip(st.links)).toEqual(strip(ex.links));
+    // The health view runs, and the fixture is healthy.
+    expect(Object.values(db.prepare('SELECT * FROM v_health').all()[0] || {}).every((v) => v === 0)).toBe(true);
+    // A Rus tag on the Dark Age men-at-arms play breaks the age rule for Rus only.
+    db.prepare("INSERT INTO civ_element_tags (id, civ_id, play_id) VALUES ('x1', 'rus', 'dark_maa')").run();
+    db.prepare("INSERT INTO civ_element_tags (id, civ_id, play_id) VALUES ('x2', 'ottomans', 'dark_maa')").run();
+    db.prepare("INSERT INTO civ_element_tags (id, civ_id, element_id, age) VALUES ('x3', 'rus', 'maa', 'dark')").run();
+    expect(db.prepare('SELECT tags_civ_cannot, tag_age_not_allowed, play_step_age_not_allowed FROM v_health').all()[0]).toEqual({ tags_civ_cannot: 1, tag_age_not_allowed: 1, play_step_age_not_allowed: 0 });
   });
 });

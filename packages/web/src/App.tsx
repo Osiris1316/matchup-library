@@ -89,7 +89,7 @@ export function App() {
   useStore();
   return (
     <>
-      <div className={'shell' + (S.view === 'library' ? ' wide' : '')}><div id="view"><View /></div></div>
+      <div className={'shell' + (S.view === 'library' || S.view.startsWith('civ-') ? ' wide' : '')}><div id="view"><View /></div></div>
       <nav className="tabs" aria-label="Main"><div className="tabs-inner" id="tabs"><Tabs /></div></nav>
       <div id="sheet"><SheetHost /></div>
       <div id="toast"><ToastView /></div>

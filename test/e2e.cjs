@@ -73,6 +73,8 @@ const check = (name, ok, extra) => results.push((ok ? 'PASS ' : 'FAIL ') + name 
   // Civ page: bulk tag for a feature, then edit one tag
   await page.goto(BASE + '/#civ-ottomans');
   await W(600);
+  // Civ pages open on Stages since deploy 2b; the tag lists are under Tags.
+  if (await page.$('[data-act="cv-tab"][data-v="tags"][aria-pressed="false"]')) { await page.click('[data-act="cv-tab"][data-v="tags"]'); await W(); }
   await page.click('[data-act="cv-bulk"]');
   await page.click('[data-act="pl-kind"][data-v="feature"]');
   await page.selectOption('#pl-id', 'exposed_close_gold');

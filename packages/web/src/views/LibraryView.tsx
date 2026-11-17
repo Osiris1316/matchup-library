@@ -16,13 +16,14 @@ const AGE_LETTER = ['D', 'F', 'C', 'I'];
 function ElementRow({ e }: { e: Element }) {
   const u = S.ui.library;
   const ages = L.elAges(e.id);
-  const note = e.mergedInto ? 'merged into ' + L.elName(e.mergedInto) : !isActive(e) ? 'retired' : e.universal ? 'every civ' : '';
+  const differ = Object.keys(e.civAges || {}).length;
+  const note = e.mergedInto ? 'merged into ' + L.elName(e.mergedInto) : !isActive(e) ? 'retired' : [e.universal ? 'every civ' : '', differ ? plural(differ, 'civ') + ' differ' + (differ === 1 ? 's' : '') : ''].filter(Boolean).join(', ');
   const civs = e.universal ? 'All' : String(L.civCount('el', e.id) || '');
   return (
     <button type="button" className={'elrow' + (isActive(e) ? '' : ' retired')} data-act="df-open" data-type="elements" data-id={e.id} aria-current={u.sel === e.id}
       onClick={() => openElement(e.id)}>
       <span className="who-el"><SplitPill el={e.id} /><span className="note">{note}</span></span>
-      <span className="agebox" aria-label={'Ages: ' + ages.join(', ')}>{AGES.map((a, i) => <span key={a} className={ages.includes(a) ? '' : 'off'}>{AGE_LETTER[i]}</span>)}</span>
+      <span className="agebox" aria-label={'Ages: ' + ages.join(', ')} title={L.agesNote(e.id)}>{AGES.map((a, i) => <span key={a} className={ages.includes(a) ? '' : 'off'}>{AGE_LETTER[i]}</span>)}</span>
       <span className="num">{civs}</span>
     </button>
   );

@@ -129,6 +129,12 @@ const DEFS: Record<DefType, DefHandler> = {
       const has = (a: Age) => bit(!ages.length || ages.includes(a));
       const merged = opt(e.mergedInto);
       const cannot: unknown[] = Array.isArray(e.cannot) ? e.cannot : [];
+      const civAges = (e.civAges && typeof e.civAges === 'object' ? e.civAges : {}) as Record<string, unknown>;
+      const ageRows: Stmt[] = [];
+      Object.keys(civAges).sort().forEach((c) => {
+        const list: unknown[] = Array.isArray(civAges[c]) ? (civAges[c] as unknown[]) : [];
+        AGES.filter((a) => list.includes(a)).forEach((a) => ageRows.push(stmt('INSERT INTO civ_element_ages (civ_id, element_id, age) VALUES (?, ?, ?)', checkId(c, 'civ'), e.id, a)));
+      });
       return [
         upsert('elements', ['id', 'name', 'kind_id', 'age_dark', 'age_feudal', 'age_castle', 'age_imperial', 'tells', 'description', 'where_note', 'is_active', 'merged_into_id',
           'subject_id', 'intent', 'is_universal', 'updated_at'],
@@ -136,7 +142,9 @@ const DEFS: Record<DefType, DefHandler> = {
             subj(e.subject), intent(e.intent), bit(e.universal), now()]),
         ...placeRows('element_id', e.id, e.where),
         stmt('DELETE FROM civ_cannot WHERE element_id = ?', e.id),
-        ...[...new Set(cannot.map(String))].map((c) => stmt('INSERT INTO civ_cannot (civ_id, element_id) VALUES (?, ?)', checkId(c, 'civ'), e.id))
+        ...[...new Set(cannot.map(String))].map((c) => stmt('INSERT INTO civ_cannot (civ_id, element_id) VALUES (?, ?)', checkId(c, 'civ'), e.id)),
+        stmt('DELETE FROM civ_element_ages WHERE element_id = ?', e.id),
+        ...ageRows
       ];
     }
   },
@@ -345,7 +353,8 @@ export const STATE_QUERIES = [
   ['kinds', 'SELECT * FROM element_kinds ORDER BY sort_order, rowid'],
   ['elements', 'SELECT * FROM elements ORDER BY rowid'],
   ['cannot', 'SELECT civ_id, element_id FROM civ_cannot ORDER BY element_id, civ_id'],
-  ['subjects', 'SELECT id, name, kind, min_age, civs, icon, default_intent, is_active FROM subjects ORDER BY kind, name'],
+  ['civAges', 'SELECT civ_id, element_id, age FROM civ_element_ages ORDER BY element_id, civ_id'],
+  ['subjects', 'SELECT id, name, kind, min_age, civs, icon, default_intent, is_active, early_ages FROM subjects ORDER BY kind, name'],
   ['playDefs', 'SELECT * FROM plays ORDER BY rowid'],
   ['playSteps', 'SELECT * FROM play_elements ORDER BY play_id, step_no, element_id'],
   ['gamePlans', 'SELECT * FROM game_plans ORDER BY rowid'],
@@ -382,7 +391,17 @@ export function buildState(r: StateRows): StateResponse {
   const playSteps = group(r.playSteps, 'play_id');
   const stages = group(r.stages, 'game_plan_id');
   const cannot = group(r.cannot, 'element_id');
-  const look = (x: Row): { intent?: Intent; subject?: string } => {
+  // Per-civ ages, only on elements that have some.
+  const ageRows = group(r.civAges || [], 'element_id');
+  const civAgesOf = (id: unknown): { civAges?: Record<string, Age[]> } => {
+    const rows = ageRows.get(id) || [];
+    if (!rows.length) return {};
+    const out: Record<string, Age[]> = {};
+    rows.forEach((x) => { const a = age(x.age); if (a) (out[s(x.civ_id)] = out[s(x.civ_id)] || []).push(a); });
+    Object.keys(out).forEach((c) => { out[c] = AGES.filter((a) => (out[c] as Age[]).includes(a)); });
+    return { civAges: out };
+  };
+  const look =(x: Row): { intent?: Intent; subject?: string } => {
     const o: { intent?: Intent; subject?: string } = {};
     const i = intent(x.intent), sj = sn(x.subject_id);
     if (i) o.intent = i;
@@ -398,7 +417,7 @@ export function buildState(r: StateRows): StateResponse {
     kinds: r.kinds.map((x) => ({ id: s(x.id), name: s(x.name), description: s(x.description), active: !!x.is_active })),
     elements: r.elements.map((e) => ({ id: s(e.id), name: s(e.name), kind: s(e.kind_id), ages: AGES.filter((a) => e['age_' + a]), tells: s(e.tells), description: s(e.description),
       where: where(cuoEl.get(e.id) || []), whereNote: s(e.where_note), active: !!e.is_active, mergedInto: sn(e.merged_into_id),
-      subject: sn(e.subject_id), intent: intent(e.intent), universal: !!e.is_universal, cannot: (cannot.get(e.id) || []).map((c) => s(c.civ_id)) })),
+      subject: sn(e.subject_id), intent: intent(e.intent), universal: !!e.is_universal, cannot: (cannot.get(e.id) || []).map((c) => s(c.civ_id)), ...civAgesOf(e.id) })),
     plays: r.playDefs.map((p) => {
       const a = age(p.age) || 'dark';
       return { id: s(p.id), name: s(p.name), age: a, family: s(p.family), description: s(p.description), tells: s(p.tells), notes: s(p.notes),
@@ -449,8 +468,10 @@ export function buildState(r: StateRows): StateResponse {
   r.subjects.forEach((x) => {
     let civs: string[] | null = null;
     try { civs = x.civs ? (JSON.parse(s(x.civs)) as string[]) : null; } catch { civs = null; }
+    let early: Record<string, number> | null = null;
+    try { early = x.early_ages ? (JSON.parse(s(x.early_ages)) as Record<string, number>) : null; } catch { early = null; }
     subjects[s(x.id)] = { id: s(x.id), name: s(x.name), kind: (oneOf(x.kind, ['unit', 'building', 'landmark', 'technology'] as const) || 'unit') as SubjectKind,
-      age: nn(x.min_age), civs, icon: sn(x.icon), defaultIntent: intent(x.default_intent), active: !!x.is_active };
+      age: nn(x.min_age), civs, icon: sn(x.icon), defaultIntent: intent(x.default_intent), active: !!x.is_active, ...(early ? { early } : {}) };
   });
   const settings: Settings = {};
   r.settings.forEach((x) => { try { settings[s(x.key)] = JSON.parse(s(x.value)); } catch { settings[s(x.key)] = x.value; } });

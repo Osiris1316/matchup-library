@@ -1,10 +1,10 @@
 // What the buttons do: open sheets with drafts, and turn saved drafts into
 // record writes. Each save is one commit, so it can be undone in one step.
 import {
-  AGES, EL_TYPES, EL_TYPE_GROUP, INTENT_NAME, ITEM_WORD, STAGE_NAME, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, lookOf, newId, newTag,
+  AGES, AGE_NAME, EL_TYPES, EL_TYPE_GROUP, INTENT_NAME, ITEM_WORD, STAGE_NAME, agesFrom, aoe4worldId, builderToSteps, clone, detectSource, guideTitle, isActive, lookOf, newId, newTag,
   normalizeUrl, openAtFrom, parsePlace, parseTime, placeKey, plural, safeUrl, slug, stable, stagesOf, stepsToBuilder, tagField, tagKey, tagKeyOf, tagTargetId, targetOf, timed,
-  fmtTime, type Age, type BuilderRow, type DefType, type DocWrite, type Element, type Game, type GamePlan, type GamePlay, type Intent, type ItemKind,
-  type Link, type Mark, type Place, type Play, type Tag
+  fmtTime, type Age, type Block, type BuilderRow, type DefType, type DocWrite, type EarlyAge, type Element, type Game, type GamePlan, type GamePlay, type Intent, type ItemKind,
+  type Link, type Mark, type Place, type Play, type Step, type Tag
 } from '@matchup-library/core';
 import { commit } from './api/client';
 import {
@@ -68,6 +68,8 @@ export async function saveTag(): Promise<void> {
   const same = L.allTags().find((t) => t.id !== d.tagId && tagKey(t) === myKey);
   const fields = { timing: d.timing.trim(), tells: d.tells.trim(), notes: d.notes.trim() };
   const name = L.itemName(d.field, d.target);
+  const blocks = L.blockers(d.civ, d.field, d.target, age);
+  if (blocks.length) { showToast(L.blockText(d.civ, blocks[0] as Block) + '. Open it for ' + L.civShort(d.civ) + ' from the sheet, or change the tag.', true); return; }
   if (same && same.active !== false) { showToast('That tag already exists, so it is open now.', true); openTagSheet({ tagId: same.id }, sh.back); return; }
   const writes: DocWrite[] = [];
   if (same) {
@@ -116,6 +118,7 @@ export async function saveBulk(): Promise<void> {
   const picked = d.picked[d.seg];
   const writes: DocWrite[] = [];
   picked.forEach((id) => {
+    if (L.blockers(d.civ, d.seg, id).length) return;
     const twin = L.allTags().find((t) => tagKey(t) === tagKeyOf(d.civ, d.seg, id, null, place));
     if (twin && twin.active !== false) return;
     if (twin) writes.push({ path: 'tags/' + twin.id, data: { ...clone(S.data.tags[twin.id] as Tag), active: true } });
@@ -134,7 +137,10 @@ export async function copyFromParent(cid: string): Promise<void> {
   const parent = c.parent;
   const own = new Map(L.allTags().filter((t) => t.civ === cid).map((t) => [tagKey({ ...t, civ: '' }), t] as const));
   const writes: DocWrite[] = [];
+  let skipped = 0;
   L.activeTags().filter((t) => t.civ === parent).forEach((t) => {
+    // The variant may not have every age its base civ has.
+    if (L.blockers(cid, tagField(t), tagTargetId(t), t.el ? t.age : null).length) { skipped += 1; return; }
     const twin = own.get(tagKey({ ...t, civ: '' }));
     if (twin && twin.active !== false) return;
     if (twin) {
@@ -144,9 +150,10 @@ export async function copyFromParent(cid: string): Promise<void> {
     }
     writes.push({ path: 'tags/' + newId(), data: { ...newTag(cid, tagField(t), tagTargetId(t), t.place), age: t.age || null, ...lookOf(t), timing: t.timing || '', tells: t.tells || '', notes: t.notes || '', copiedFrom: t.id } });
   });
-  if (!writes.length) { showToast('Nothing new to copy.', true); return; }
+  const skipNote = skipped ? ' Left out ' + plural(skipped, 'tag') + ' with ages ' + c.name + " can't do." : '';
+  if (!writes.length) { showToast('Nothing new to copy.' + skipNote, true); return; }
   S.sheet = null;
-  await commit('Copied ' + plural(writes.length, 'tag') + ' from ' + L.civName(parent) + ' to ' + c.name, writes);
+  await commit('Copied ' + plural(writes.length, 'tag') + ' from ' + L.civName(parent) + ' to ' + c.name, writes, 'Copied ' + plural(writes.length, 'tag') + '.' + skipNote);
 }
 
 // ---------------------------------------------------------------------------
@@ -154,7 +161,7 @@ export async function copyFromParent(cid: string): Promise<void> {
 // ---------------------------------------------------------------------------
 const civOnFor = (field: ItemKind, id: string): string[] => [...new Set(L.activeTags().filter((t) => t[field] === id && placeKey(t.place) === 'any:').map((t) => t.civ))];
 function blankDraft(): DefDraft {
-  return { name: '', description: '', kind: '', ages: AGES.slice(), tells: '', subject: '', intent: '', universal: false, cannot: [],
+  return { name: '', description: '', kind: '', ages: AGES.slice(), tells: '', subject: '', intent: '', universal: false, cannot: [], civAges: {},
     builder: [], age: 'dark', family: '', stages: {}, status: '',
     where: [], whereNote: '', civOn: [], mapsOn: [], type: '', features: [], inPool: true, notes: '', short: '', parent: '' };
 }
@@ -163,7 +170,7 @@ function elementDraft(id: string | null): DefDraft {
   const it = S.data.defs.elements.find((x) => x.id === id);
   if (it) {
     Object.assign(d, { name: it.name, kind: it.kind || '', ages: L.elAges(it.id).slice(), description: it.description || '', tells: it.tells || '', where: clone(it.where || []), whereNote: it.whereNote || '',
-      civOn: civOnFor('el', it.id), subject: it.subject || '', intent: it.intent || '', universal: !!it.universal, cannot: (it.cannot || []).slice() });
+      civOn: civOnFor('el', it.id), subject: it.subject || '', intent: it.intent || '', universal: !!it.universal, cannot: (it.cannot || []).slice(), civAges: clone(it.civAges || {}) });
   } else d.kind = 'unit';
   return d;
 }
@@ -307,13 +314,17 @@ async function saveDefDraft(t: DefType, origId: string | null, d: DefDraft, clos
   const field = FIELD_OF[t];
   if (field) {
     if (t === 'elements') {
+      const cannot = d.universal ? d.cannot.slice().sort() : [];
+      const civAges: Record<string, Age[]> = {};
+      Object.keys(d.civAges).sort().forEach((c) => { const a = AGES.filter((x) => (d.civAges[c] || []).includes(x)); if (a.length && !cannot.includes(c)) civAges[c] = a; });
       Object.assign(item, { kind: d.kind, ages: AGES.filter((a) => d.ages.includes(a)), description: d.description.trim(), tells: d.tells.trim(),
-        subject: d.subject || null, intent: d.intent || null, universal: !!d.universal, cannot: d.universal ? d.cannot.slice().sort() : [] });
+        subject: d.subject || null, intent: d.intent || null, universal: !!d.universal, cannot });
+      if (Object.keys(civAges).length) item.civAges = civAges; else delete item.civAges;
     } else if (t === 'plays') {
       const steps = builderToSteps(d.builder, d.age);
       if (!steps.length) { showToast('Add at least one element to the play.', true); return null; }
-      const off = steps.find((st) => !L.elAges(st.el).includes(d.age));
-      if (off) { showToast(L.elName(off.el) + " can't happen in " + STAGE_NAME[d.age] + '. Change the age, or take it out.', true); return null; }
+      const off = steps.find((st) => !L.anyCivCan(st.el, d.age));
+      if (off) { showToast('No civ can do ' + L.elName(off.el) + ' in ' + STAGE_NAME[d.age] + ' yet. Open it for a civ from its step, change the age, or take it out.', true); return null; }
       const twin = L.matchPlay(d.builder, d.age, origId);
       if (twin && twin.id !== origId) { showToast('Same steps as ' + twin.name + ' in this age. Edit that play instead, or change the steps.', true); return null; }
       const p = prev as Play | null;
@@ -331,6 +342,12 @@ async function saveDefDraft(t: DefType, origId: string | null, d: DefDraft, clos
     }
     item.where = d.where;
     item.whereNote = d.where.length ? d.whereNote.trim() : '';
+    // A civ newly ticked for a play or game plan must be able to do every step in its age.
+    if (t !== 'elements') {
+      const fresh = d.civOn.filter((c) => !L.activeTags().some((x) => x.civ === c && tagField(x) === field && tagTargetId(x) === origId && placeKey(x.place) === 'any:'));
+      const stuck = fresh.find((c) => draftBlockers(t, d, c).length);
+      if (stuck) { showToast(L.blockText(stuck, draftBlockers(t, d, stuck)[0] as Block) + '. Open it for ' + L.civShort(stuck) + ' below, or untick ' + L.civShort(stuck) + '.', true); return null; }
+    }
     // A universal element is implied for every civ, so its civ list isn't edited here.
     const r = t === 'elements' && d.universal ? { writes: [], on: 0, off: 0 } : civTagWrites(field, id, d.civOn);
     extra.push(...r.writes);
@@ -382,6 +399,72 @@ export function addStep(builder: BuilderRow[], elId: string): void {
   if (ages.length === 1) age = ages[0] as Age; else if (prev && prev.age && ages.includes(prev.age)) age = prev.age;
   builder.push({ el: elId, age, join: false });
 }
+// ---------------------------------------------------------------------------
+// Ages by civ: what a civ can't do, and the one-tap fixes
+// ---------------------------------------------------------------------------
+// The civ a moment is about: the side that did it in a game, or the guide's civ.
+export function momentCiv(d: MomentDraft): string | null {
+  if (d.refKind === 'game' && d.gameId) {
+    const g = S.data.games[d.gameId];
+    return g ? (d.side === 'player' ? g.playerCiv : g.oppCiv) || null : null;
+  }
+  return d.civ || null;
+}
+// What a civ can't do in a play or game plan as it stands in the sheet, before saving.
+export function draftBlockers(t: DefType, d: DefDraft, civ: string): Block[] {
+  if (t === 'plays') return L.cantDo(civ, builderToSteps(d.builder, d.age), d.age);
+  if (t !== 'gamePlans') return [];
+  const out: Block[] = [];
+  AGES.forEach((a) => {
+    const p = d.stages[a] ? L.play(d.stages[a]?.play) : null;
+    if (p) L.cantDo(civ, p.steps as Step[], p.age).forEach((b) => { if (!out.some((x) => x.el === b.el && x.age === b.age)) out.push(b); });
+  });
+  return out;
+}
+// The element with new ages for some civs, as saved. A civ on the "can't" list comes off it.
+function withCivAges(e: Element, changes: { civ: string; ages: Age[] }[]): Element {
+  const next = clone(e);
+  const civAges: Record<string, Age[]> = { ...(next.civAges || {}) };
+  changes.forEach((c) => { civAges[c.civ] = AGES.filter((a) => c.ages.includes(a)); });
+  next.civAges = civAges;
+  next.cannot = (next.cannot || []).filter((c) => !changes.some((x) => x.civ === c));
+  return next;
+}
+// Keeps an open element editor in step with a change saved from elsewhere.
+function syncEditor(elId: string, changes: { civ: string; ages: Age[] }[]): void {
+  const u = S.ui.library;
+  if (u.sel !== elId || !u.draft) return;
+  const dirty = elementDirty();
+  changes.forEach((c) => { u.draft!.civAges[c.civ] = c.ages.slice(); u.draft!.cannot = u.draft!.cannot.filter((x) => x !== c.civ); });
+  if (!dirty) u.saved = stable(u.draft);
+}
+// The fix for a block: let the civ do the element in that age (and up to its usual ages),
+// or take it off the "can't" list.
+export async function openForCiv(civ: string, b: Block): Promise<void> {
+  const e = L.el(b.el);
+  if (!e) return;
+  const ages = b.age ? L.agesWith(civ, b.el, b.age) : L.elAges(b.el);
+  const change = [{ civ, ages }];
+  const items = clone(S.data.defs.elements).map((x) => (x.id === b.el ? withCivAges(x, change) : x));
+  syncEditor(b.el, change);
+  const what = b.age ? 'Opened ' + e.name + ' to ' + L.civShort(civ) + ' in ' + STAGE_NAME[b.age] : 'Took ' + L.civShort(civ) + " off the civs that can't do " + e.name;
+  await commit(what, [{ path: 'defs/elements', data: { items } }], what + '. ' + L.civShort(civ) + ' can do it in ' + ages.map((a) => AGE_NAME[a]).join(', ') + '.');
+}
+// The aoe4world data's earlier ages, added in one go.
+export async function addEarlyAges(list: EarlyAge[]): Promise<void> {
+  if (!list.length) return;
+  const byEl = new Map<string, { civ: string; ages: Age[] }[]>();
+  list.forEach((x) => byEl.set(x.el, [...(byEl.get(x.el) || []), { civ: x.civ, ages: x.ages }]));
+  const items = clone(S.data.defs.elements).map((x) => (byEl.has(x.id) ? withCivAges(x, byEl.get(x.id) || []) : x));
+  byEl.forEach((ch, el) => syncEditor(el, ch));
+  await commit('Added ' + plural(list.length, 'earlier age') + ' from AoE4 World', [{ path: 'defs/elements', data: { items } }],
+    'Added ' + list.map((x) => L.civShort(x.civ) + ' ' + L.elName(x.el) + ' from ' + AGE_NAME[x.age]).join(', ') + '.');
+}
+// The draft's ages for a civ with one more, for the element editor.
+export function draftAgesWith(d: DefDraft, civ: string, age: Age): Age[] {
+  return agesFrom(d.civAges[civ] || d.ages, d.ages, age);
+}
+
 // A step's intent: the element's default, then each override in turn.
 export function cycleIntent(row: BuilderRow): void {
   const opts: (Intent | null)[] = [null, 'offensive', 'defensive', 'economic'];
@@ -556,8 +639,13 @@ export async function saveMoment(again: boolean): Promise<void> {
   const first = steps[0];
   if (planMode && !d.plan) { showToast('Pick the game plan first.', true); return; }
   if (!planMode && !first) { showToast('Add what happened first: one element, or several for a play.', true); return; }
-  const off = steps.find((st) => !L.elAges(st.el).includes(d.age));
-  if (off) { showToast(L.elName(off.el) + " can't happen in " + STAGE_NAME[d.age] + '. Change the age, or take it out.', true); return; }
+  const civ = momentCiv(d);
+  const off = steps.find((st) => (civ ? !L.civCan(civ, st.el, d.age) : !L.anyCivCan(st.el, d.age)));
+  if (off) {
+    showToast((civ ? L.blockText(civ, { el: off.el, age: d.age }) + '. Open it for ' + L.civShort(civ) : 'No civ can do ' + L.elName(off.el) + ' in ' + STAGE_NAME[d.age] + ' yet. Open it for a civ')
+      + ' from its step, change the age, or take it out.', true);
+    return;
+  }
   const atText = (d.at || '').trim();
   const at = atText ? parseTime(atText) : null;
   if (atText && at == null) { showToast('Write the time like 2:30, or leave it empty.', true); return; }
@@ -643,6 +731,6 @@ export async function deleteMoment(): Promise<void> {
 export function whyNewTag(): void {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'why') return;
-  openTagSheet({ civ: sh.civ, field: sh.itemKind, id: sh.id, place: parsePlace(S.ui.check.place) }, sh);
+  openTagSheet({ civ: sh.civ, field: sh.itemKind, id: sh.id, place: parsePlace(sh.place ?? S.ui.check.place) }, sh);
 }
 export type { DefSheet };

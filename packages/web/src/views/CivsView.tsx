@@ -4,8 +4,10 @@ import { L, S, civIdFromView, civSlug, emit, savePrefs } from '../store';
 import { copyFromParent, openBulk, openDef, openTagSheet, restoreTag, toggleDefActive } from '../actions';
 import { Flag, hasFlag } from '../components/Flag';
 import { Icon } from '../components/Icon';
-import { NewButton, PageHead, RetiredToggle, UpkeepLink } from '../components/bits';
+import { NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../components/bits';
 import { PlanStages, SplitPill, StepPills } from '../components/Pill';
+import { CivStages } from './CivStages';
+import type { CivTab } from '../store';
 
 export function CivsView() {
   const u = S.ui.civs;
@@ -89,11 +91,20 @@ export function CivView() {
   const parentTags = parent ? L.activeTags().filter((t) => t.civ === parent.id) : [];
   const u = S.ui.civ;
   const mark = c.short && c.short !== c.name ? c.short : '';
+  const tabs = (
+    <Seg label="Show" act="cv-tab" options={[['stages', 'Stages'], ['tags', 'Tags']] as [CivTab, string][]} current={u.tab}
+      onPick={(v) => { u.tab = v; savePrefs(); emit(); }} />
+  );
+  const head = (
+    <PageHead title={c.name} back="civs" mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
+      aside={<button type="button" className="head-link" data-act="cv-edit" onClick={() => openDef('civs', cid)}>Edit civ</button>} />
+  );
+  if (u.tab === 'stages') return <>{head}<main className="main stages-main"><CivStages cid={cid} tabs={tabs} /></main></>;
   return (
     <>
-      <PageHead title={c.name} back="civs" mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
-        aside={<button type="button" className="head-link" data-act="cv-edit" onClick={() => openDef('civs', cid)}>Edit civ</button>} />
-      <main className="main">
+      {head}
+      <main className="main narrow">
+        <div className="cv-tabs">{tabs}</div>
         {parent && parentTags.length > 0 && !active.length && (
           <div className="panel">
             <span className="hint">{c.name} is a variant of {parent.name}, which has {plural(parentTags.length, 'tag')}. Copy them here, then change what differs.</span>
