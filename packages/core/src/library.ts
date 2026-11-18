@@ -7,9 +7,9 @@
 //   plan  a game plan: one play per age, Dark through early Castle
 // Evidence flows downward: a tag on a game plan documents each of its plays,
 // and a tag on a play documents each of its elements in that play's age.
-import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, STAGE_AGES, STAGE_NAME, type Age, type Civ, type ElType, type Element, type Feature, type Game,
+import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, STAGE_AGES, STAGE_NAME, type Age, type Answer, type Branch, type Civ, type ElType, type Element, type Feature, type Game,
   type GamePlan, type GamePlay, type Intent, type Kind, type LibraryData, type Link, type MapDef, type MapType, type Mark, type Place, type PlaceKind,
-  type Play, type Stage, type Step, type Subject, type Tag, type UseLook } from './types';
+  type Play, type Stage, type Step, type Subject, type Tag, type Trigger, type UseLook } from './types';
 import { byName, cap, fmtDate, fmtTime, hostOf, lowerFirst, plural, slug } from './text';
 
 export type TagWithId = Tag & { id: string };
@@ -314,6 +314,62 @@ export class Library {
     return !!p && fitsAge(p.age, age) && p.steps.some((st) => st.el === elId && fitsIntent(intent, this.useIntent(elId, st)));
   }
   planHasPlay(gid: string | null | undefined, pid: string): boolean { return stagesOf(this.plan(gid)).some(({ stage }) => stage.play === pid); }
+
+  // -------------------------------------------------------------- branches and answers
+  // A game plan's branches, in order; retired ones only when asked.
+  branchesOf(gid: string | null | undefined, withRetired = false): Branch[] {
+    const g = this.plan(gid);
+    return ((g && g.branches) || []).filter((b) => withRetired || b.active !== false);
+  }
+  branch(gid: string | null | undefined, bid: string): Branch | null { return this.branchesOf(gid, true).find((b) => b.id === bid) || null; }
+  // The age a trigger is seen in: its own, or its play's.
+  triggerAge(t: Trigger | null | undefined): Age | null {
+    if (!t) return null;
+    if (t.play) { const p = this.play(t.play); return p ? p.age : null; }
+    return t.age;
+  }
+  // "Spears in Dark Age", "Spears, then towers in Dark Age", "... from HRE".
+  triggerText(t: Trigger | null | undefined): string {
+    if (!t || (!t.el && !t.play)) return '';
+    const a = this.triggerAge(t);
+    const what = t.play ? this.playTitle(t.play) : this.elName(t.el);
+    return what + (a ? ' in ' + STAGE_NAME[a] : '') + (t.civ ? ' from ' + this.civShort(t.civ) : '');
+  }
+  // Whether a play in an age shows what a trigger is waiting for.
+  triggerMatches(t: Trigger | null | undefined, playId: string, age: Age): boolean {
+    if (!t) return false;
+    if (t.play) return t.play === playId;
+    const p = this.play(playId);
+    return !!p && t.age === age && !!t.el && p.steps.some((st) => st.el === t.el);
+  }
+  // Problems with a branch as it stands, in words. Empty when it's fine.
+  branchProblems(b: Pick<Branch, 'stages' | 'rejoins' | 'trigger'>): string[] {
+    const out: string[] = [];
+    const ages = AGES.filter((a) => b.stages[a] && b.stages[a]?.play);
+    if (!ages.length) out.push('Pick a play for at least one age.');
+    ages.forEach((a) => { const p = this.play(b.stages[a]?.play); if (p && p.age !== a) out.push(p.name + ' is a ' + STAGE_NAME[p.age] + ' play, not ' + STAGE_NAME[a] + '.'); });
+    const last = ages[ages.length - 1];
+    if (b.rejoins && last && AGES.indexOf(b.rejoins) <= AGES.indexOf(last)) out.push('It rejoins in ' + STAGE_NAME[b.rejoins] + ' but still has a play there or later.');
+    const ta = this.triggerAge(b.trigger);
+    const first = ages[0];
+    if (ta && first && AGES.indexOf(first) < AGES.indexOf(ta)) out.push('It starts in ' + STAGE_NAME[first] + ', before you could scout ' + this.triggerText({ ...(b.trigger as Trigger), civ: null }) + '.');
+    if (b.trigger && b.trigger.el && !b.trigger.age) out.push('Say which age you scout ' + this.elName(b.trigger.el) + ' in.');
+    return out;
+  }
+  // The answer for a pairing: the one for both civs, else one for either civ, else one for any civs.
+  answerFor(their: string, my: string, myCiv: string | null, oppCiv: string | null): [string, Answer] | null {
+    const all = Object.entries(this.data.answers || {}).filter(([, a]) => a.active !== false && a.theirPlan === their && a.myPlan === my);
+    const tries: [string | null, string | null][] = [[myCiv, oppCiv], [myCiv, null], [null, oppCiv], [null, null]];
+    for (const [mc, oc] of tries) {
+      const hit = all.find(([, a]) => (a.myCiv || null) === mc && (a.oppCiv || null) === oc);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  // Every answer that uses a game plan, on either side.
+  answersWith(gid: string): [string, Answer][] {
+    return Object.entries(this.data.answers || {}).filter(([, a]) => a.active !== false && (a.theirPlan === gid || a.myPlan === gid));
+  }
   planHasEl(gid: string | null | undefined, elId: string, age: Age | null, intent: Intent | null = null): boolean {
     return stagesOf(this.plan(gid)).some(({ stage }) => this.playHasEl(stage.play, elId, age, intent));
   }
@@ -628,6 +684,8 @@ export class Library {
     if (mergedRefs) issues.push(plural(mergedRefs, 'record still points at something merged', 'records still point at merged plays or game plans'));
     const untyped = this.data.defs.elements.filter((e) => isActive(e) && !this.elType(e.id)).length;
     if (untyped) issues.push(plural(untyped, 'element has no type yet', 'elements have no type yet') + ' (unit, structure, economy, or age-up or tech)');
+    const badBranches = this.activePlans().flatMap((g) => this.branchesOf(g.id).filter((b) => this.branchProblems(b).length).map((b) => g.name + ': ' + b.name));
+    if (badBranches.length) issues.push(plural(badBranches.length, 'branch needs a look', 'branches need a look') + ': ' + badBranches.slice(0, 4).join('; ') + (badBranches.length > 4 ? '; and more' : ''));
     return { dupes, planDupes, issues, early: this.allEarlyAges() };
   }
 

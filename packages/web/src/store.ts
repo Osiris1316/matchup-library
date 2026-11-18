@@ -4,7 +4,7 @@
 import { useSyncExternalStore } from 'react';
 import {
   Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type Intent, type ItemKind, type LibraryData,
-  type Outcome, type Place, type PlaceKind, type PlanStatus, type Prep, type Shows
+  type Outcome, type Place, type PlaceKind, type PlanStatus, type Prep, type Shows, type Stage
 } from '@matchup-library/core';
 
 export type DbState = 'connecting' | 'ready' | 'unavailable' | 'unauthorized';
@@ -54,7 +54,20 @@ export type UpkeepSheet = SheetBase & { kind: 'upkeep' };
 export type MergeSheet = SheetBase & { kind: 'merge'; what: 'play' | 'plan'; keep: string | null };
 export type RefSheet = SheetBase & { kind: 'refdet'; draft: RefDraft };
 export type MomentSheet = SheetBase & { kind: 'moment'; draft: MomentDraft; picking: boolean };
-export type Sheet = DefSheet | TagSheet | BulkSheet | WhySheet | UpkeepSheet | MergeSheet | RefSheet | MomentSheet;
+// A branch off a game plan. side: yours (with a trigger) or theirs (a variant).
+export interface BranchDraft {
+  planId: string; id: string | null; side: 'mine' | 'theirs'; name: string;
+  trigger: 'none' | 'el' | 'play'; el: string; elAge: Age; play: string; civ: string;
+  stages: Partial<Record<Age, Stage>>; rejoins: Age | ''; tells: string; notes: string; status: PlanStatus | '';
+}
+export type BranchSheet = SheetBase & { kind: 'branch'; draft: BranchDraft };
+// Your game plan against theirs. onlyMine and onlyTheirs: the answer is for those civs only.
+export interface AnswerDraft {
+  id: string | null; theirPlan: string; myPlan: string; myCiv: string; oppCiv: string; onlyMine: boolean; onlyTheirs: boolean;
+  status: PlanStatus; notes: string; ageNotes: Partial<Record<Age, string>>;
+}
+export type AnswerSheet = SheetBase & { kind: 'answer'; draft: AnswerDraft };
+export type Sheet = DefSheet | TagSheet | BulkSheet | WhySheet | UpkeepSheet | MergeSheet | RefSheet | MomentSheet | BranchSheet | AnswerSheet;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 export type NewSheet = DistributiveOmit<Sheet, 'sid'>;
 
@@ -83,6 +96,8 @@ export const S = {
     civ: { showRetired: false, tab: 'stages' as CivTab, sel: null as CivSel | null, selFor: '', place: 'any:', showParts: false, showOpen: true },
     maps: { seg: 'maps' as MapsSeg, showRetired: false },
     check: { me: 'chinese', opp: 'ottomans', place: 'any:', seg: 'plays' as CheckSeg, showElsewhere: false },
+    // The Versus page: their civ and game plan, yours.
+    versus: { them: '', their: '', me: '', mine: '' },
     refs: { seg: 'all' as RefsSeg, url: '' }
   },
   sheet: null as Sheet | null,
@@ -131,8 +146,9 @@ export function showToast(text: string, warn = false, undoId: string | null = nu
 const PREFS = 'matchup-library-prefs-v2';
 export function loadPrefs(): void {
   try {
-    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; lastView?: string; ref?: typeof S.refDefaults };
+    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; versus?: Partial<typeof S.ui.versus>; lastView?: string; ref?: typeof S.refDefaults };
     if (p.check) Object.assign(S.ui.check, p.check);
+    if (p.versus) Object.assign(S.ui.versus, p.versus);
     if (p.civ && (p.civ.tab === 'stages' || p.civ.tab === 'tags')) S.ui.civ.tab = p.civ.tab;
     if (p.civ && typeof p.civ.showOpen === 'boolean') S.ui.civ.showOpen = p.civ.showOpen;
     if (p.lastView) S.lastView = p.lastView;
@@ -142,13 +158,13 @@ export function loadPrefs(): void {
 export function savePrefs(): void {
   try {
     const c = S.ui.check;
-    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen },
+    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen }, versus: S.ui.versus,
       lastView: S.view.startsWith('ref-') ? 'refs' : S.view, ref: S.refDefaults }));
   } catch { /* storage unavailable */ }
 }
 
 // ---------------------------------------------------------------- routes
-const VIEWS = ['library', 'civs', 'maps', 'refs', 'check'];
+const VIEWS = ['library', 'civs', 'maps', 'refs', 'versus', 'check'];
 export function route(): void {
   const h = (location.hash || '').replace(/^#/, '');
   const ok = (v: string | null): v is string => !!v && (VIEWS.includes(v) || v.startsWith('civ-') || v.startsWith('ref-'));

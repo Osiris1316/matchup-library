@@ -76,6 +76,7 @@ describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
     Object.entries(ex.tags).forEach(([id, d]) => writes.push({ path: 'tags/' + id, data: d }));
     Object.entries(ex.games).forEach(([id, d]) => writes.push({ path: 'games/' + id, data: d }));
     Object.entries(ex.links).forEach(([id, d]) => writes.push({ path: 'links/' + id, data: d }));
+    Object.entries(ex.answers).forEach(([id, d]) => writes.push({ path: 'answers/' + id, data: d }));
     writes.forEach((w) => docStatements(w.path, w.data, null).A.forEach((s) => db.prepare(s.sql).run(...s.params)));
 
     const rows = {} as StateRows;
@@ -88,6 +89,7 @@ describe.skipIf(!DatabaseSync)('round trip through the schema', () => {
     expect(strip(st.tags)).toEqual(strip(ex.tags));
     expect(strip(st.games)).toEqual(strip(ex.games));
     expect(strip(st.links)).toEqual(strip(ex.links));
+    expect(strip(st.answers)).toEqual(strip(ex.answers));
     // The health view runs, and the fixture is healthy.
     expect(Object.values(db.prepare('SELECT * FROM v_health').all()[0] || {}).every((v) => v === 0)).toBe(true);
     // A Rus tag on the Dark Age men-at-arms play breaks the age rule for Rus only.

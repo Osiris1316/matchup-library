@@ -13,6 +13,8 @@ import { BulkSheet, TagSheet } from './sheets/TagSheets';
 import { WhySheet } from './sheets/WhySheet';
 import { MergeSheet, UpkeepSheet } from './sheets/UpkeepSheet';
 import { MomentSheet, RefDetailsSheet } from './sheets/RefSheets';
+import { AnswerSheet, BranchSheet } from './sheets/VersusSheets';
+import { VersusView } from './views/VersusView';
 
 function Message({ text }: { text: string }) {
   return <><PageHead title="Matchup Library" /><main className="main"><p className="empty">{text}</p></main></>;
@@ -28,12 +30,13 @@ function View() {
   if (v.startsWith('civ-')) return <CivView />;
   if (v === 'maps') return <MapsView />;
   if (v === 'check') return <CheckView />;
+  if (v === 'versus') return <VersusView />;
   if (v === 'refs') return <RefsView />;
   if (v.startsWith('ref-')) return <RefView />;
   return <LibraryView />;
 }
 
-const TABS: [IconName, string][] = [['library', 'Library'], ['civs', 'Civs'], ['maps', 'Maps'], ['refs', 'References'], ['check', 'Check']];
+const TABS: [IconName, string][] = [['library', 'Library'], ['civs', 'Civs'], ['maps', 'Maps'], ['refs', 'References'], ['versus', 'Versus'], ['check', 'Check']];
 function Tabs() {
   const active = S.view.startsWith('civ') ? 'civs' : S.view.startsWith('ref') ? 'refs' : S.view;
   return <>{TABS.map(([id, name]) => <a key={id} className="tab" href={'#' + id} aria-current={active === id ? 'page' : undefined}><Icon name={id} />{name}</a>)}</>;
@@ -49,6 +52,8 @@ function SheetInner({ sh }: { sh: Sheet }) {
     case 'merge': return <MergeSheet sh={sh} />;
     case 'refdet': return <RefDetailsSheet sh={sh} />;
     case 'moment': return <MomentSheet sh={sh} />;
+    case 'branch': return <BranchSheet sh={sh} />;
+    case 'answer': return <AnswerSheet sh={sh} />;
   }
 }
 
@@ -89,7 +94,7 @@ export function App() {
   useStore();
   return (
     <>
-      <div className={'shell' + (S.view === 'library' || S.view.startsWith('civ-') ? ' wide' : '')}><div id="view"><View /></div></div>
+      <div className={'shell' + (S.view === 'library' || S.view === 'versus' || S.view.startsWith('civ-') ? ' wide' : '')}><div id="view"><View /></div></div>
       <nav className="tabs" aria-label="Main"><div className="tabs-inner" id="tabs"><Tabs /></div></nav>
       <div id="sheet"><SheetHost /></div>
       <div id="toast"><ToastView /></div>

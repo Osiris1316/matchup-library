@@ -448,3 +448,69 @@ button:disabled { cursor: default; opacity: 0.55; }
 /* "Plays with" in the element editor's side pane: rows, not default buttons. */
 .uses .item { width: 100%; margin: 0; padding: 9px 0; background: transparent; border: 0; border-top: 1px solid var(--line-soft); color: var(--fg); text-align: left; align-items: flex-start; }
 .uses .item:hover .t { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ---------------------------------------------------------------------------
+   Phase 3: the Versus page. The same six columns as a civ's stages: labels,
+   then each age with an age-up gutter between. Lines sit under the cards.
+   --------------------------------------------------------------------------- */
+.vs-main { gap: 14px; }
+.vs-pick { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px 18px; padding: 12px 14px; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--r); }
+.vs-side-pick { display: flex; flex-direction: column; gap: 6px; flex: 1 1 260px; max-width: 420px; }
+.vs-swap { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; background: transparent; border: 1px solid var(--line); border-radius: var(--r); color: var(--muted); }
+.vs-key { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-left: auto; font-size: 12px; color: var(--muted); }
+.vs-key > span { display: inline-flex; align-items: center; gap: 8px; }
+.vs-key .sw { display: inline-block; width: 26px; height: 0; }
+.vs-key .sw.spine { border-top: 4px solid var(--fg-2); border-radius: 2px; }
+.vs-key .sw.branch { border-top: 3px solid var(--muted); }
+.vs-key .sw.trigger { border-top: 2px dashed var(--fg-2); }
+.vs-key .sw.idea { width: 22px; height: 14px; border: 1px dashed var(--muted); border-radius: 3px; }
+.vs-board { position: relative; display: flex; flex-direction: column; gap: 10px; }
+.vs-lines { display: none; position: absolute; inset: 0; width: 100%; height: 100%; z-index: 1; pointer-events: none; overflow: visible; }
+.vs-lines path { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+.vs-lines .spine { stroke: var(--muted); stroke-width: 4; }
+.vs-lines .spine.mine { stroke: var(--fg-2); }
+.vs-lines .branch { stroke: var(--muted); stroke-width: 3; }
+.vs-lines .branch.mine { stroke: var(--fg-2); }
+.vs-lines .trigger { stroke: var(--fg-2); stroke-width: 2; stroke-dasharray: 5 5; }
+.vs-tlabel { display: none; position: absolute; z-index: 3; transform: translate(-50%, -50%); padding: 3px 8px; background: var(--hover); border: 1px solid var(--dash); border-radius: 6px;
+  font-size: 11.5px; font-weight: 600; white-space: nowrap; pointer-events: none; }
+.vs-heads { display: none; }
+.vs-side { display: flex; flex-direction: column; gap: 6px; padding: 10px 0; background: color-mix(in srgb, var(--surface) 60%, transparent); border-radius: 10px; }
+.vs-lane { display: flex; flex-direction: column; gap: 6px; padding: 4px 10px; }
+.vs-label { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.vs-label .t { font-size: 13px; font-weight: 600; }
+.vs-label .s { font-size: 11.5px; color: var(--muted); }
+.vs-bname { padding: 0; margin: 0; border: 0; background: transparent; color: var(--fg); font-size: 12.5px; font-weight: 600; text-align: left; cursor: pointer; }
+.vs-lane.spine .vs-bname { font-weight: 500; color: var(--fg-2); }
+.vs-bname:hover { text-decoration: underline; text-underline-offset: 2px; }
+.vs-cell { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.vs-cell:not(:has(.vs-card, .vs-note, .vs-empty)) { display: none; }
+.vs-card { position: relative; z-index: 2; display: flex; flex-direction: column; gap: 4px; width: 100%; min-height: 58px; padding: 7px 10px; margin: 0; border-radius: var(--r); text-align: left; color: var(--fg);
+  background: var(--surface); border: 1px solid var(--dash); cursor: pointer; }
+.vs-card[data-dashed="1"] { background: var(--bg); border-style: dashed; }
+.vs-card.is-trigger { border-color: var(--fg-2); }
+.vs-card .nm { font-size: 12.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vs-card .spills { padding-top: 0; }
+.vs-empty { position: relative; z-index: 2; font-size: 12px; color: var(--faint); }
+.vs-note { position: relative; z-index: 2; width: 100%; padding: 6px 9px; margin: 0; background: var(--hover); border: 1px solid var(--dash); border-radius: 6px; color: var(--fg-2);
+  font-size: 12px; text-align: left; cursor: pointer; }
+.vs-add { position: relative; z-index: 2; padding: 0 10px; }
+.vs-add .textlink { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; }
+.vs-answer .vs-notes { margin: 0; font-size: 13px; color: var(--fg-2); white-space: pre-wrap; }
+.vs-answer .btn { align-self: flex-start; }
+
+@media (min-width: 1100px) {
+  .vs-heads, .vs-lane { display: grid; grid-template-columns: minmax(200px, 248px) minmax(0, 1fr) 56px minmax(0, 1fr) 56px minmax(0, 1fr); column-gap: 0; align-items: center; }
+  .vs-heads { padding: 0 10px; }
+  .vs-heads > [data-cell="dark"], .vs-lane > [data-cell="dark"] { grid-column: 2; }
+  .vs-heads > [data-cell="feudal"], .vs-lane > [data-cell="feudal"] { grid-column: 4; }
+  .vs-heads > [data-cell="castle"], .vs-lane > [data-cell="castle"] { grid-column: 6; }
+  .vs-lane { min-height: 66px; }
+  .vs-label { grid-column: 1; padding-right: 44px; }
+  .vs-cell:not(:has(.vs-card, .vs-note, .vs-empty)) { display: flex; }
+  .vs-lines, .vs-tlabel { display: block; }
+  .vs-lane .phone-only { display: none; }
+  .vs-lane.meet { min-height: 48px; }
+}
+.vs-add .textlink { width: auto; min-height: 32px; justify-content: flex-start; color: var(--muted); }
+.vs-add .textlink:hover { color: var(--fg); }

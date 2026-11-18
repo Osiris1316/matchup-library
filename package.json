@@ -14,8 +14,6 @@
     "migrate:remote": "wrangler d1 migrations apply matchup-library --remote",
     "import-preview": "tsx scripts/import-preview.ts",
     "subjects": "tsx scripts/subjects.ts",
-    "phase1-elements": "tsx scripts/phase1-elements.ts",
-    "phase2-plays": "tsx scripts/phase2-plays.ts",
     "backup-order": "tsx scripts/backup-order.ts",
     "deploy": "pnpm build:web && wrangler deploy"
   },

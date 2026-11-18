@@ -8,6 +8,7 @@ import {
 } from '@matchup-library/core';
 import { L, S, emit, openSheet, type CivSel } from '../store';
 import { openDef, openTagSheet } from '../actions';
+import { openVersus } from '../versus';
 import { MapGroups } from '../components/bits';
 import { MiniPill, PillFace, StepPills } from '../components/Pill';
 
@@ -173,6 +174,7 @@ function Picked({ cid, sel, vp }: { cid: string; sel: CivSel; vp: Place }) {
         <button type="button" className="btn btn-sm" data-act="stg-why" onClick={() => openSheet({ kind: 'why', itemKind: field, id: sel.id, civ: cid, place: S.ui.civ.place })}>Why</button>
         <button type="button" className="btn btn-sm" data-act="stg-tag" onClick={() => openTagSheet({ civ: cid, field, id: sel.id, place: vp })}>Tag {L.civShort(cid)}</button>
         <button type="button" className="btn btn-sm" data-act="stg-edit" onClick={() => openDef(isPlan ? 'gamePlans' : 'plays', sel.id)}>Edit</button>
+        {isPlan && <button type="button" className="btn btn-sm" data-act="stg-versus" onClick={() => openVersus({ them: cid, their: sel.id })}>Answer it in Versus</button>}
         <button type="button" className="btn btn-sm btn-outline" data-act="stg-clear" onClick={() => pick(null)}>Clear</button>
       </span>
     </div>

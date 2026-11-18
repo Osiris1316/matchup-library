@@ -69,6 +69,18 @@ export interface GamePlan {
   id: string; name: string; description: string; notes: string; status: PlanStatus | null;
   stages: Partial<Record<Age, Stage>>;
   where: Place[]; whereNote: string; active: boolean; mergedInto: string | null;
+  branches?: Branch[];
+}
+// What you scout that sends you down a branch: one element in an age, or a
+// whole play (in its own age); optionally only against one civ.
+export interface Trigger { el: string | null; play: string | null; age: Age | null; civ: string | null }
+// A detour off a game plan: a play for each age it covers, then back into the
+// spine at rejoins (null: it doesn't rejoin). Your branches have a trigger;
+// an opponent's variant has none.
+export interface Branch {
+  id: string; name: string; trigger: Trigger | null;
+  stages: Partial<Record<Age, Stage>>; rejoins: Age | null;
+  tells: string; notes: string; status: PlanStatus | null; active: boolean;
 }
 export interface Defs {
   civs: Civ[]; mapTypes: MapType[]; features: Feature[]; maps: MapDef[];
@@ -115,11 +127,12 @@ export interface Link {
   checked: string | null; notes: string; createdAt?: string | null; marks: Mark[];
 }
 export type AnswerStatus = 'idea' | 'studying' | 'practiced' | 'proven';
+// Your game plan against theirs, optionally for one civ on each side: a status,
+// notes, and a note per age on where the two meet.
 export interface Answer {
-  target: 'element' | 'play'; elementId: string | null; strategyId: string | null; age: Age | null;
-  myCiv: string | null; oppCiv: string | null; place: Place; title: string; plan: string;
-  status: AnswerStatus; notes?: string; confirmed: string | null; active: boolean; createdAt?: string | null;
-  steps: { answerId: string | null; note: string }[];
+  theirPlan: string; myPlan: string; myCiv: string | null; oppCiv: string | null;
+  status: AnswerStatus; notes: string; ageNotes: Partial<Record<Age, string>>;
+  active: boolean; createdAt?: string | null;
 }
 export interface Settings { lastPatch?: string | null; [key: string]: unknown }
 

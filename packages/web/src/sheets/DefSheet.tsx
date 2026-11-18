@@ -10,6 +10,7 @@ import { AgeSeg, Builder, MultiSelect, type MsOption } from '../components/picke
 import { CloseBtn, Field, Seg } from '../components/bits';
 import { StepPills } from '../components/Pill';
 import { GameTitle } from '../views/RefsView';
+import { openBranch, openVersus } from '../versus';
 
 // Which civs do it: ticking one tags it anywhere. blocksFor says what a civ
 // can't do in it (a play's or game plan's steps), as the sheet stands.
@@ -110,6 +111,28 @@ function StageField({ sh, age }: { sh: DefSheetT; age: Age }) {
   );
 }
 
+// A game plan's branches: detours set off by something scouted, or variants.
+function BranchesField({ planId, sh }: { planId: string; sh: DefSheetT }) {
+  const list = L.branchesOf(planId);
+  return (
+    <div className="field">
+      <span className="label">Branches</span>
+      {list.map((b) => (
+        <button key={b.id} type="button" className="item" data-act="df-branch" data-id={b.id} onClick={() => openBranch(planId, b.id, b.trigger ? 'mine' : 'theirs', sh)}>
+          <span className="t">{b.name}</span>
+          <span className="s">{b.trigger ? 'If you scout ' + L.triggerText(b.trigger) : 'Variant'}. {b.rejoins ? 'Rejoins in ' + STAGE_NAME[b.rejoins] : 'Doesn\'t rejoin'}.</span>
+        </button>
+      ))}
+      {!list.length && <span className="hint">None yet. A branch leaves this game plan when you scout something; a variant is another way it goes.</span>}
+      <div className="chiprow">
+        <button type="button" className="btn btn-outline btn-sm" data-act="df-branch-new" onClick={() => openBranch(planId, null, 'mine', sh)}>Add a branch</button>
+        <button type="button" className="btn btn-outline btn-sm" data-act="df-variant-new" onClick={() => openBranch(planId, null, 'theirs', sh)}>Add a variant</button>
+        <button type="button" className="btn btn-outline btn-sm" data-act="df-versus" onClick={() => { S.sheet = null; openVersus({ mine: planId }); }}>Open in Versus</button>
+      </div>
+    </div>
+  );
+}
+
 export function DefSheet({ sh }: { sh: DefSheetT }) {
   const d = sh.draft, t = sh.type;
   const it = sh.id ? (S.data.defs[t] as { id: string; name: string; active: boolean; mergedInto?: string | null }[]).find((x) => x.id === sh.id) || null : null;
@@ -134,6 +157,7 @@ export function DefSheet({ sh }: { sh: DefSheetT }) {
   } else if (t === 'gamePlans') {
     body = <>
       {STAGE_AGES.map((a) => <StageField key={a} sh={sh} age={a} />)}
+      {it ? <BranchesField planId={it.id} sh={sh} /> : <div className="field"><span className="label">Branches</span><span className="hint">Add the game plan first, then its branches.</span></div>}
       <CivChips field="plan" id={sh.id} d={d} blocksFor={(c) => draftBlockers('gamePlans', d, c)} />
       <div className="field"><span className="label">Status</span><Seg label="Status" act="df-status" options={STATUS} current={d.status} onPick={(v) => { d.status = v; emit(); }} /></div>
       {desc('What the game plan is going for')}

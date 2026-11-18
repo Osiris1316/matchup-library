@@ -229,9 +229,40 @@ describe('civ stages', () => {
     const data = fixture();
     data.tags.g = { civ: 'rus', el: null, play: null, plan: 'towers_into_castle', age: null, place: { kind: 'any' }, timing: '', tells: '', notes: '', confirmed: null, active: true };
     const L = new Library(data);
-    expect(L.civStages('rus', any).plans.map((p) => p.id + ':' + p.tier)).toEqual(['towers_into_castle:documented']);
+    expect(L.civStages('rus', any).plans.filter((p) => p.tier === 'documented').map((p) => p.id)).toEqual(['towers_into_castle']);
     const feudal = L.civStages('rus', any).columns[1]!;
     expect(feudal.families.flatMap((f) => f.cards.map((c) => L.stageBadge(c)))).toEqual(['Through a game plan']);
+  });
+});
+
+describe('branches and answers', () => {
+  const L = new Library(fixture());
+  it('read a branch\'s trigger and match it to what the opponent plays', () => {
+    const b = L.branchesOf('greedy')[0]!;
+    expect(L.triggerText(b.trigger)).toBe('Tower rush in Dark Age');
+    expect(L.triggerMatches(b.trigger, 'barracks_towers', 'dark')).toBe(true);
+    expect(L.triggerMatches(b.trigger, 'dark_maa', 'dark')).toBe(false);
+    expect(L.triggerMatches({ el: null, play: 'barracks_towers', age: null, civ: 'rus' }, 'barracks_towers', 'dark')).toBe(true);
+    expect(L.triggerText({ el: null, play: 'barracks_towers', age: null, civ: 'rus' })).toBe('Barracks into towers in Dark Age from Rus');
+  });
+  it('say what is wrong with a branch', () => {
+    expect(L.branchProblems(L.branchesOf('greedy')[0]!)).toEqual([]);
+    expect(L.branchProblems({ stages: {}, rejoins: null, trigger: null })).toEqual(['Pick a play for at least one age.']);
+    expect(L.branchProblems({ stages: { dark: { play: 'dark_maa', notes: '' } }, rejoins: 'dark', trigger: null }))
+      .toEqual(['It rejoins in Dark Age but still has a play there or later.']);
+    expect(L.branchProblems({ stages: { dark: { play: 'dark_maa', notes: '' } }, rejoins: null, trigger: { el: 'towers', play: null, age: 'feudal', civ: null } }))
+      .toEqual(['It starts in Dark Age, before you could scout Tower rush in Feudal Age.']);
+    expect(L.branchProblems({ stages: { feudal: { play: 'dark_maa', notes: '' } }, rejoins: null, trigger: null }))
+      .toEqual(['Barracks into men-at-arms is a Dark Age play, not Feudal Age.']);
+  });
+  it('find the answer for a pairing, most specific first', () => {
+    expect(L.answerFor('towers_into_castle', 'greedy', 'rus', 'ottomans')![0]).toBe('a1');
+    expect(L.answerFor('towers_into_castle', 'greedy', 'rus', 'scots')).toBe(null);
+    const data = fixture();
+    data.answers.a2 = { theirPlan: 'towers_into_castle', myPlan: 'greedy', myCiv: null, oppCiv: null, status: 'idea', notes: '', ageNotes: {}, active: true };
+    expect(new Library(data).answerFor('towers_into_castle', 'greedy', 'rus', 'scots')![0]).toBe('a2');
+    expect(new Library(data).answerFor('towers_into_castle', 'greedy', 'rus', 'ottomans')![0]).toBe('a1');
+    expect(new Library(data).answersWith('greedy').length).toBe(2);
   });
 });
 

@@ -50,7 +50,12 @@ export function fixture(): LibraryData {
       ],
       gamePlans: [
         { id: 'towers_into_castle', name: 'Towers into naked castle', description: '', notes: '', status: null, where: [], whereNote: '', active: true, mergedInto: null,
-          stages: { dark: { play: 'barracks_towers', notes: 'Two towers on the gold' }, feudal: { play: 'nfc', notes: '' } } }
+          stages: { dark: { play: 'barracks_towers', notes: 'Two towers on the gold' }, feudal: { play: 'nfc', notes: '' } } },
+        // Your plan: a naked castle, and a branch for when you scout their towers.
+        { id: 'greedy', name: 'Greedy naked castle', description: '', notes: '', status: 'studying', where: [], whereNote: '', active: true, mergedInto: null,
+          stages: { feudal: { play: 'nfc', notes: '' } },
+          branches: [{ id: 'b1', name: 'Answer the towers', trigger: { el: 'towers', play: null, age: 'dark', civ: null },
+            stages: { dark: { play: 'dark_maa', notes: 'Push them off the gold' } }, rejoins: 'feudal', tells: '', notes: '', status: 'idea', active: true }] }
       ]
     },
     tags: {
@@ -77,7 +82,9 @@ export function fixture(): LibraryData {
       'regnitz-cathedral': { id: 'regnitz-cathedral', name: 'Regnitz Cathedral', kind: 'landmark', age: 2, civs: ['holy_roman_empire'], icon: 'buildings/regnitz-cathedral-2.png', defaultIntent: null, active: true },
       'man-at-arms': { id: 'man-at-arms', name: 'Man-at-Arms', kind: 'unit', age: 1, civs: ['ottomans', 'rus'], icon: 'units/man-at-arms-1.png', defaultIntent: null, active: true, early: { rus: 1 } }
     },
-    answers: {},
+    answers: {
+      a1: { theirPlan: 'towers_into_castle', myPlan: 'greedy', myCiv: 'rus', oppCiv: 'ottomans', status: 'idea', notes: 'Hold the gold', ageNotes: { feudal: 'Their castle lands first' }, active: true }
+    },
     settings: { lastPatch: '12.1' }
   };
 }

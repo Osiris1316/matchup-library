@@ -139,14 +139,14 @@ async function writeSql(data: string | null, outPath: string): Promise<void> {
 // Every subject id a download points at.
 function idsInDownload(path: string): string[] {
   const d = JSON.parse(readFileSync(path, 'utf8')) as {
-    defs?: { elements?: { subject?: string | null }[]; strategies?: { steps?: { subject?: string | null }[] }[] };
+    defs?: { elements?: { subject?: string | null }[]; plays?: { steps?: { subject?: string | null }[] }[] };
     tags?: Record<string, { subject?: string | null }>; games?: Record<string, { plays?: { subject?: string | null }[] }>;
     links?: Record<string, { marks?: { subject?: string | null }[] }>;
   };
   const ids = new Set<string>();
   const add = (v: string | null | undefined) => { if (v) ids.add(v); };
   (d.defs?.elements || []).forEach((e) => add(e.subject));
-  (d.defs?.strategies || []).forEach((s) => (s.steps || []).forEach((st) => add(st.subject)));
+  (d.defs?.plays || []).forEach((p) => (p.steps || []).forEach((st) => add(st.subject)));
   Object.values(d.tags || {}).forEach((t) => add(t.subject));
   Object.values(d.games || {}).forEach((g) => (g.plays || []).forEach((p) => add(p.subject)));
   Object.values(d.links || {}).forEach((l) => (l.marks || []).forEach((m) => add(m.subject)));

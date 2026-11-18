@@ -279,9 +279,10 @@ function civTagWrites(field: ItemKind, id: string, civOn: string[]): { writes: D
 export async function saveDef(): Promise<void> {
   const sh = S.sheet;
   if (!sh || sh.kind !== 'def') return;
-  const back = sh.back && sh.back.kind === 'def' && sh.back.type === 'gamePlans' ? sh.back : null;
+  // A new play made for a stage goes back into the game plan or branch it came from.
+  const back = sh.back && ((sh.back.kind === 'def' && sh.back.type === 'gamePlans') || sh.back.kind === 'branch') ? sh.back : null;
   const stageAge = sh.stageFor || null;
-  const id = await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = back; });
+  const id = await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = back || sh.back || null; });
   if (id && back && stageAge) {
     back.draft.stages[stageAge] = { play: id, notes: (back.draft.stages[stageAge] || { notes: '' }).notes || '' };
     emit();
@@ -490,12 +491,37 @@ export async function doMerge(what: 'play' | 'plan', keepId: string): Promise<vo
     ? { path: 'defs/plays', data: { items: clone(S.data.defs.plays).map((s) => (gone.includes(s.id) ? { ...s, active: false, mergedInto: keepId } : s)) } }
     : { path: 'defs/gamePlans', data: { items: clone(S.data.defs.gamePlans).map((s) => (gone.includes(s.id) ? { ...s, active: false, mergedInto: keepId } : s)) } }];
   let moved = 0;
-  // Game plans that use a merged play now use the one kept.
+  // Game plans and their branches that use a merged play now use the one kept.
   if (what === 'play') {
     const plans = clone(S.data.defs.gamePlans);
     let changed = false;
-    plans.forEach((g) => AGES.forEach((a) => { const st = g.stages[a]; if (st && isGone(st.play)) { st.play = keepId; changed = true; moved += 1; } }));
+    plans.forEach((g) => {
+      AGES.forEach((a) => { const st = g.stages[a]; if (st && isGone(st.play)) { st.play = keepId; changed = true; moved += 1; } });
+      (g.branches || []).forEach((b) => {
+        AGES.forEach((a) => { const st = b.stages[a]; if (st && isGone(st.play)) { st.play = keepId; changed = true; moved += 1; } });
+        if (b.trigger && isGone(b.trigger.play)) { b.trigger.play = keepId; changed = true; moved += 1; }
+      });
+    });
     if (changed) writes.push({ path: 'defs/gamePlans', data: { items: plans } });
+  } else {
+    // A merged game plan's branches move to the one kept, and so do its answers,
+    // unless the kept one already has an answer for that pairing.
+    const plans = writes[0]!.data as { items: GamePlan[] };
+    const keep = plans.items.find((g) => g.id === keepId);
+    plans.items.forEach((g) => {
+      if (!gone.includes(g.id) || !keep || !(g.branches || []).length) return;
+      keep.branches = [...(keep.branches || []), ...(g.branches || []).map((b) => ({ ...b, name: (keep.branches || []).some((x) => x.name === b.name) ? b.name + ' (' + g.name + ')' : b.name }))];
+      moved += (g.branches || []).length;
+      delete g.branches;
+    });
+    const answers = Object.entries(S.data.answers || {});
+    answers.forEach(([aid, a]) => {
+      if (!isGone(a.theirPlan) && !isGone(a.myPlan)) return;
+      const next = { ...clone(a), theirPlan: isGone(a.theirPlan) ? keepId : a.theirPlan, myPlan: isGone(a.myPlan) ? keepId : a.myPlan };
+      if (answers.some(([x, b]) => x !== aid && b.theirPlan === next.theirPlan && b.myPlan === next.myPlan && (b.myCiv || null) === (next.myCiv || null) && (b.oppCiv || null) === (next.oppCiv || null))) return;
+      writes.push({ path: 'answers/' + aid, data: next });
+      moved += 1;
+    });
   }
   Object.entries(S.data.games).forEach(([gid, g]) => {
     if (!(g.plays || []).some((p) => isGone(p[key]))) return;

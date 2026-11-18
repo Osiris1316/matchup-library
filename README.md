@@ -21,12 +21,11 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/web/src/` | The page (React and Vite): `views/` for screens, `sheets/` for the pop-up sheets, `components/`, `styles/global.css`. |
 | `packages/web/src/components/Pill.tsx` | The split pill: an element's icon tile coloured by type, its name coloured by intent. |
 | `packages/web/src/views/CivStages.tsx` | A civ's stages: its plays per age, its game plans, and the path through a picked game plan. |
+| `packages/web/src/views/VersusView.tsx` | Versus: your game plan against theirs, with branches, triggers and the answer. |
 | `packages/web/public/flags/` | Civ flags, from the league manager. |
 | `packages/web/public/icons/` | The aoe4world icons the library uses (see Credits). |
 | `scripts/import-preview.ts` | Turns a download (Upkeep, then Download a copy) into SQL for D1. |
 | `scripts/subjects.ts` | Loads units, buildings, landmarks and technologies from the aoe4world data repo, with the civs that get each one earlier than most, and copies the icons in use. |
-| `scripts/phase1-elements.ts` | One-off: moves the elements from before phase 1 onto types, icons and intent. |
-| `scripts/phase2-plays.ts` | One-off: splits the first version's plays into plays (one age each) and game plans. |
 | `scripts/backup-order.ts` | Reorders a `wrangler d1 export` file so it loads into an empty database. |
 | `data/` | Your library data (kept out of git). |
 | `docs/deferred-views.sql` | Matchup and coverage views from the design stage, set aside for later. |
@@ -47,6 +46,14 @@ A **play** is one age's steps in order, such as Barracks then Spears in the Dark
 A **game plan** is one play for each age: how a game goes from the start into Castle. Each age it covers is a **stage**, with its own notes on how the play is run there. The same play can sit in many game plans.
 
 Tags and references work with all three: an element, a play or a game plan. Evidence flows down, so a civ tagged with a game plan counts for each of its plays, and each play counts for its elements in that play's age. A moment in a game or guide is either a whole game plan, or steps in one age: one element, or several, which match a saved play or become a new one.
+
+## Branches, answers and Versus
+
+A **branch** is a detour off a game plan: a play for each age it changes, and the age where it flows back into the game plan, or none. Your branches have a **trigger**, what you scout that sends you down them: an element in an age (Spears in the Dark Age) or a whole play, optionally only against one civ. A branch belongs to its game plan, not to one matchup, so "if I scout spears" works against every game plan that shows spears. A branch with no trigger is a **variant**, another way a game plan goes, usually an opponent's.
+
+An **answer** is your game plan against theirs: a status, notes, and a note per age on where the two meet ("their flood meets your crossbows by about 9:00"). An answer can be for one civ on each side, or for any civ running the game plan; the most specific one applies.
+
+The **Versus** page puts the two side by side across Dark, Feudal and early Castle: their game plan along the top with its variants, yours along the bottom with your branches, and the answer's notes between them. Lines show where a branch leaves and rejoins its game plan, and a dashed line runs from the card on their side that shows your trigger to the branch it sets off. Add branches and variants from the page or from a game plan's sheet; a civ's stages page opens a picked game plan in Versus.
 
 ## Ages by civ
 
