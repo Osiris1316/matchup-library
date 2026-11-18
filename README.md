@@ -18,10 +18,13 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/core/test/` | Tests for the rules and for the trip through the schema (`pnpm test`). |
 | `packages/api/src/worker.ts` | The Worker (Hono): `/api/state`, `/api/commit`, and the page from the assets. |
 | `packages/api/src/auth.ts` | The Access token check. |
-| `packages/web/src/` | The page (React and Vite): `views/` for screens, `sheets/` for the pop-up sheets, `components/`, `styles/global.css`. |
-| `packages/web/src/components/Pill.tsx` | The split pill: an element's icon tile coloured by type, its name coloured by intent. |
-| `packages/web/src/views/CivStages.tsx` | A civ's stages: its plays per age, its game plans, and the path through a picked game plan. |
-| `packages/web/src/views/VersusView.tsx` | Versus: your game plan against theirs, with branches, triggers and the answer. |
+| `packages/web/src/` | The page (React, React Router and Vite). `packages/web/ARCHITECTURE.md` explains the layers and their rules. |
+| `packages/web/src/app/` | Routes and addresses (`paths.ts`), the layout and the tab bar. |
+| `packages/web/src/pages/` | One folder per page: the Library, civs and a civ's page, maps, references, Versus and Check. |
+| `packages/web/src/kit/` | Reusable pieces that only draw what they're given, each with its own styles: pills, the play card, lines between cards. |
+| `packages/web/src/styles/` | `tokens.css` (colors, space, type, corners), `base.css`, and `legacy.css` for page styles still to move into modules. |
+| `packages/web/src/pages/civs/CivStages.tsx` | A civ's stages: its plays per age, its game plans, and the path through a picked game plan. |
+| `packages/web/src/pages/versus/VersusPage.tsx` | Versus: your game plan against theirs, with branches, triggers and the answer. |
 | `packages/web/public/flags/` | Civ flags, from the league manager. |
 | `packages/web/public/icons/` | The aoe4world icons the library uses (see Credits). |
 | `scripts/import-preview.ts` | Turns a download (Upkeep, then Download a copy) into SQL for D1. |
@@ -180,7 +183,7 @@ npx wrangler d1 execute matchup-library --local --file data\import.sql
 pnpm dev
 ```
 
-`pnpm dev` starts the Worker on port 8787 and the page on port 5173. Open http://localhost:5173: the page reloads as you edit it, and `/api` goes to the local Worker and its local D1. `.dev.vars` turns sign-in off locally. It's ignored by git and never deployed. Never set `ALLOW_NO_AUTH` on the real Worker.
+`pnpm dev` starts the Worker on port 8787 and the page on port 5173. Open http://localhost:5173: the page reloads as you edit it, every page address (such as /civs/rus) opens directly, and `/api` goes to the local Worker and its local D1. `.dev.vars` turns sign-in off locally. It's ignored by git and never deployed. Never set `ALLOW_NO_AUTH` on the real Worker.
 
 Before you push a change:
 
@@ -189,7 +192,7 @@ pnpm typecheck
 pnpm test
 ```
 
-`pnpm test` runs the rules tests and a round trip of records through every migration in a local SQLite. The round trip needs Node 22.13 or later and is skipped on older versions. The browser test in `test/e2e.cjs` is optional: it needs Playwright, a fresh local database with the subjects and a library loaded, and `pnpm build:web` then `npx wrangler dev` running. Set `CHROME_PATH` to use an installed Chrome.
+`pnpm test` runs the rules tests, the page's tests (addresses and line geometry), and a round trip of records through every migration in a local SQLite. The round trip needs Node 22.13 or later and is skipped on older versions. The browser test in `test/e2e.cjs` is optional: it needs Playwright, a fresh local database with the subjects and a library loaded, and `pnpm build:web` then `npx wrangler dev` running. Set `CHROME_PATH` to use an installed Chrome.
 
 ## Changing things later
 

@@ -1,8 +1,8 @@
 // Maps: maps, features and map types.
 import { byName, isActive, plural, type Feature, type MapDef, type MapType } from '@matchup-library/core';
-import { L, S, emit, type MapsSeg } from '../store';
-import { DEF_WORD } from '../actions';
-import { DefRow, NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../components/bits';
+import { L, S, emit, useStore, type MapsSeg } from '../../store';
+import { DEF_WORD } from '../../actions';
+import { DefRow, NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../../components/bits';
 
 const HINT: Record<MapsSeg, string> = {
   maps: 'Open a map to give it features. Features let one tag cover every map that has them.',
@@ -10,7 +10,8 @@ const HINT: Record<MapsSeg, string> = {
   mapTypes: 'The broad buckets maps fall into.'
 };
 
-export function MapsView() {
+export function MapsPage() {
+  useStore();
   const u = S.ui.maps;
   const D = S.data.defs;
   const all: (MapDef | Feature | MapType)[] = D[u.seg];

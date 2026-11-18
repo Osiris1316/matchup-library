@@ -2,20 +2,45 @@
 // Versus page that lays the two side by side.
 import { AGES, STAGE_AGES, clone, newId, type Age, type Answer, type Branch, type GamePlan, type PlanStatus } from '@matchup-library/core';
 import { commit } from './api/client';
-import { L, S, emit, openSheet, savePrefs, showToast, type AnswerDraft, type BranchDraft, type Sheet } from './store';
+import { paths, readVersus, type VersusPicks } from './app/paths';
+import { currentPath, currentSearch, go } from './app/navigation';
+import { L, S, openSheet, savePrefs, showToast, type AnswerDraft, type BranchDraft, type Sheet } from './store';
 
 // ---------------------------------------------------------------- the page
-// Opens the Versus page on a pairing; anything not given stays as it was.
-export function openVersus(opts: { them?: string; their?: string; me?: string; mine?: string }): void {
-  Object.entries(opts).forEach(([k, v]) => { if (v !== undefined) (S.ui.versus as Record<string, string>)[k] = v; });
-  savePrefs();
-  if (location.hash !== '#versus') location.hash = '#versus'; else emit();
+// The pairing showing lives in the address (/versus?them=&their=&me=&mine=), so
+// it can be bookmarked and the back button works. The last one is remembered in
+// this browser, to reopen /versus on.
+
+// The pairing an address shows. Missing civs fall back to the ones Check uses.
+export function pairingFrom(search: string): VersusPicks {
+  const u = readVersus(search);
+  return { them: u.them || S.ui.check.opp, their: u.their || '', me: u.me || S.ui.check.me, mine: u.mine || '' };
 }
-export function swapSides(): void {
+export const lastPairing = (): VersusPicks => ({ ...S.ui.versus });
+export const hasLastPairing = (): boolean => Object.values(S.ui.versus).some(Boolean);
+export function rememberPairing(p: VersusPicks): void {
   const v = S.ui.versus;
-  [v.them, v.me] = [v.me, v.them];
-  [v.their, v.mine] = [v.mine, v.their];
-  savePrefs(); emit();
+  if (v.them === p.them && v.their === p.their && v.me === p.me && v.mine === p.mine) return;
+  Object.assign(v, p);
+  savePrefs();
+}
+
+// Shows a pairing. A change made on the page replaces the address, so Back
+// leaves Versus rather than stepping through every pick.
+export function showPairing(p: VersusPicks, onPage: boolean): void {
+  rememberPairing(p);
+  go(paths.versus(p), { replace: onPage, keepScroll: onPage });
+}
+
+// Opens Versus on a pairing; anything not given stays as it was.
+export function openVersus(opts: Partial<VersusPicks>): void {
+  const base = currentPath() === paths.versus() ? pairingFrom(currentSearch()) : pairingFrom(paths.versus(lastPairing()).split('?')[1] || '');
+  const next = { ...base };
+  (Object.keys(opts) as (keyof VersusPicks)[]).forEach((k) => { const v = opts[k]; if (v !== undefined) next[k] = v; });
+  showPairing(next, false);
+}
+export function swapSides(p: VersusPicks): void {
+  showPairing({ them: p.me, their: p.mine, me: p.them, mine: p.their }, true);
 }
 
 // ---------------------------------------------------------------- branches

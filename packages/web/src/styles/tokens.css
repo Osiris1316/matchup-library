@@ -1,0 +1,91 @@
+/* Design tokens: every color, space, type size, radius and layer the page uses.
+   Components read these and never hard-code their own. Dark is the default;
+   light follows the system unless the page is pinned with data-theme.
+
+   Breakpoints can't be variables in a media query, so they live here as a note
+   and in kit/breakpoints.ts for code:
+     wide   min-width: 1100px   desk layout, top tab bar, lines between cards
+     phone  max-width: 640px    single column tweaks */
+
+:root {
+  /* Surfaces, from the page back to the most raised */
+  --bg: #0c0c0d; --surface: #131315; --raised: #1a1a1d; --hover: #202024;
+  /* Lines */
+  --line: #2a2a2f; --line-soft: #1f1f23; --dash: #4a4a52;
+  /* Text, strongest first */
+  --fg: #ededed; --fg-2: #c4c4ca; --muted: #a1a1a7; --faint: #8a8a92;
+  /* Actions and states */
+  --primary-bg: #ededed; --primary-fg: #0c0c0d; --focus: #6ea8fe;
+  --warn: #e08a4a; --danger: #d27a7a; --ok: #7cc192;
+  --scrim: rgba(0, 0, 0, 0.6); --shadow: 0 8px 28px rgba(0, 0, 0, 0.45);
+
+  /* Element pills: the tile is colored by type, the name by intent. Color is
+     reserved for type and intent; selection is shown by brightness. */
+  --t-unit: #5a4c22; --t-structure: #34343b; --t-economy: #2f4a37; --t-age: #3d3354; --t-none: #26262b;
+  --i-off-bg: #2a1c1c; --i-off-bd: #693a3a; --i-off-fg: #ecd7d7; --i-off-hi: #b06060;
+  --i-def-bg: #1a212b; --i-def-bd: #3a5270; --i-def-fg: #d5e0eb; --i-def-hi: #5f86b5;
+  --i-eco-bg: #1b241e; --i-eco-bd: #3c5945; --i-eco-fg: #d5e5d9; --i-eco-hi: #64946f;
+  --i-none-bg: #1e1e22; --i-none-bd: #45454c; --i-none-fg: #dadade; --i-none-hi: #8a8a92;
+  --glyph: #cbbfe6;
+
+  /* Type */
+  --font: "Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --text-2xs: 10px; --text-xs: 11px; --text-sm: 12px; --text-md: 13px; --text-lg: 15px; --text-xl: 16px; --text-2xl: 20px;
+  --weight-regular: 400; --weight-medium: 500; --weight-bold: 600;
+
+  /* Space: --space-N is N times 2px */
+  --space-1: 2px; --space-2: 4px; --space-3: 6px; --space-4: 8px; --space-5: 10px; --space-6: 12px;
+  --space-7: 14px; --space-8: 16px; --space-10: 20px; --space-12: 24px; --space-16: 32px;
+
+  /* Corners. --r is the older name for --radius-md. */
+  --radius-xs: 3px; --radius-sm: 5px; --radius-md: 8px; --radius-lg: 12px; --radius-full: 999px;
+  --r: var(--radius-md);
+
+  /* Layers, lowest first */
+  --z-lines: 1; --z-card: 2; --z-head: 5; --z-nav: 6; --z-safe-top: 10; --z-scrim: 20; --z-sheet: 21; --z-toast: 30;
+
+  /* Fixed sizes the layout depends on */
+  --nav-height-wide: 53px;
+  --tap: 44px;
+
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #f4f4f2; --surface: #ffffff; --raised: #f7f7f5; --hover: #ececea;
+    --line: #d9d9d5; --line-soft: #e8e8e5; --dash: #a3a3a8;
+    --fg: #16161a; --fg-2: #2e2e34; --muted: #55555d; --faint: #62626a;
+    --primary-bg: #1d2b4f; --primary-fg: #ffffff; --focus: #2f5bd3;
+    --warn: #b25c17; --danger: #b0443c; --ok: #2c7a4b;
+    --scrim: rgba(20, 20, 24, 0.45); --shadow: 0 8px 28px rgba(20, 20, 24, 0.16);
+    --t-unit: #c9b46e; --t-structure: #9a9aa3; --t-economy: #7fa889; --t-age: #9d8cc4; --t-none: #d9d9d5;
+    --i-off-bg: #f7e6e6; --i-off-bd: #d6a0a0; --i-off-fg: #5c1f1f; --i-off-hi: #a84b4b;
+    --i-def-bg: #e4ebf5; --i-def-bd: #9db4d2; --i-def-fg: #1e3552; --i-def-hi: #3f6797;
+    --i-eco-bg: #e3f0e6; --i-eco-bd: #9fc4a9; --i-eco-fg: #1e4a2a; --i-eco-hi: #3f7a50;
+    --i-none-bg: #efefed; --i-none-bd: #c4c4c0; --i-none-fg: #2e2e34; --i-none-hi: #75757d;
+    --glyph: #3d3354;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #f4f4f2; --surface: #ffffff; --raised: #f7f7f5; --hover: #ececea;
+  --line: #d9d9d5; --line-soft: #e8e8e5; --dash: #a3a3a8;
+  --fg: #16161a; --fg-2: #2e2e34; --muted: #55555d; --faint: #62626a;
+  --primary-bg: #1d2b4f; --primary-fg: #ffffff; --focus: #2f5bd3;
+  --warn: #b25c17; --danger: #b0443c; --ok: #2c7a4b;
+  --scrim: rgba(20, 20, 24, 0.45); --shadow: 0 8px 28px rgba(20, 20, 24, 0.16);
+  --t-unit: #c9b46e; --t-structure: #9a9aa3; --t-economy: #7fa889; --t-age: #9d8cc4; --t-none: #d9d9d5;
+  --i-off-bg: #f7e6e6; --i-off-bd: #d6a0a0; --i-off-fg: #5c1f1f; --i-off-hi: #a84b4b;
+  --i-def-bg: #e4ebf5; --i-def-bd: #9db4d2; --i-def-fg: #1e3552; --i-def-hi: #3f6797;
+  --i-eco-bg: #e3f0e6; --i-eco-bd: #9fc4a9; --i-eco-fg: #1e4a2a; --i-eco-hi: #3f7a50;
+  --i-none-bg: #efefed; --i-none-bd: #c4c4c0; --i-none-fg: #2e2e34; --i-none-hi: #75757d;
+  --glyph: #3d3354;
+  color-scheme: light;
+}
+
+/* Intent as a palette: anything marked data-intent picks up its four colors. */
+[data-intent="offensive"] { --pill-bg: var(--i-off-bg); --pill-bd: var(--i-off-bd); --pill-fg: var(--i-off-fg); --pill-hi: var(--i-off-hi); }
+[data-intent="defensive"] { --pill-bg: var(--i-def-bg); --pill-bd: var(--i-def-bd); --pill-fg: var(--i-def-fg); --pill-hi: var(--i-def-hi); }
+[data-intent="economic"] { --pill-bg: var(--i-eco-bg); --pill-bd: var(--i-eco-bd); --pill-fg: var(--i-eco-fg); --pill-hi: var(--i-eco-hi); }
+[data-intent="none"] { --pill-bg: var(--i-none-bg); --pill-bd: var(--i-none-bd); --pill-fg: var(--i-none-fg); --pill-hi: var(--i-none-hi); }

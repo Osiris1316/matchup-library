@@ -1,6 +1,8 @@
 // Check detail: every reason an element, play or game plan is listed for a civ.
+import { Link } from 'react-router';
 import { STAGE_NAME, cap, fmtTime, parsePlace, urlAt, type Place } from '@matchup-library/core';
-import { L, S, civSlug, type WhySheet as WhySheetT } from '../store';
+import { L, S, type WhySheet as WhySheetT } from '../store';
+import { paths, refPath } from '../app/paths';
 import { openTagSheet, whyNewTag } from '../actions';
 import { Flag } from '../components/Flag';
 import { CloseBtn } from '../components/bits';
@@ -39,7 +41,7 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
           <span className="strong">{L.evText(e, sh.itemKind)}</span>
           {note && <span className="hint">{note}</span>}
           <span className="hint">
-            <a className="ulink" href={'#' + route}>Open the reference</a>
+            <Link className="ulink" to={refPath(route)}>Open the reference</Link>
             {watch && <> · <a className="ulink" href={watch} target="_blank" rel="noopener">Watch from {fmtTime(at)}</a></>}
           </span>
         </div>
@@ -89,7 +91,7 @@ export function WhySheet({ sh }: { sh: WhySheetT }) {
         </section>
       )}
       <div className="btn-row">
-        <a className="btn" href={'#civ-' + civSlug(sh.civ)}>{L.civShort(sh.civ)} page</a>
+        <Link className="btn" to={paths.civ(sh.civ, S.ui.civ.tab)}>{L.civShort(sh.civ)} page</Link>
         <button type="button" className="btn btn-primary" data-act="why-new-tag" onClick={whyNewTag}>Tag {L.placePhrase(vpPlace)}</button>
       </div>
     </>

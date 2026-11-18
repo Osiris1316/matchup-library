@@ -3,14 +3,20 @@
 // your branches above it; between them, where the two meet, age by age. Lines
 // show where a branch leaves its spine and where it flows back, and a dashed
 // line runs from what you scout on their side to the branch it sets off.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
+import { Navigate, useLocation } from 'react-router';
 import { AGES, STAGE_AGES, STAGE_NAME, byName, isActive, type Age, type Branch, type GamePlan, type PlanStatus } from '@matchup-library/core';
-import { L, S, emit, savePrefs } from '../store';
-import { openDef } from '../actions';
-import { openAnswer, openBranch, swapSides } from '../versus';
-import { CivSelect, PageHead, UpkeepLink } from '../components/bits';
-import { Icon } from '../components/Icon';
-import { StepPills } from '../components/Pill';
+import { L, useStore } from '../../store';
+import { openDef } from '../../actions';
+import { hasLastPairing, lastPairing, openAnswer, openBranch, pairingFrom, rememberPairing, showPairing, swapSides } from '../../versus';
+import { paths, type VersusPicks } from '../../app/paths';
+import { CivSelect, PageHead, UpkeepLink } from '../../components/bits';
+import { Icon } from '../../components/Icon';
+import { StepPills } from '../../components/Pill';
+import { PlayCard } from '../../kit/play-card/PlayCard';
+import { LineLayer, type Line, type LineLabel } from '../../kit/lines/LineLayer';
+import { useMeasured } from '../../kit/lines/useMeasured';
+import { boxIn, elbow, type Box } from '../../kit/lines/geometry';
 
 const ANY = { kind: 'any' as const };
 const STATUS_NAME: Record<PlanStatus, string> = { idea: 'Idea', studying: 'Studying', practiced: 'Practiced', proven: 'Proven' };
@@ -27,7 +33,7 @@ function PlanSelect({ id, civ, value, onPick, mine }: { id: string; civ: string;
   return (
     <select id={id} className="select" value={value} onChange={(e) => {
       if (e.target.value === '__new') { openDef('gamePlans', null); return; }
-      onPick(e.target.value); savePrefs(); emit();
+      onPick(e.target.value);
     }}>
       <option value="">{mine ? 'Pick your game plan' : 'Pick their game plan'}</option>
       {doc.length > 0 && <optgroup label={'Documented for ' + civName}>{all.filter((g) => doc.includes(g.id)).map(opt)}</optgroup>}
@@ -42,11 +48,9 @@ function Card({ lane, age, play, dashed, trigger }: { lane: string; age: Age; pl
   const p = L.play(play);
   if (!p) return null;
   return (
-    <button type="button" className={'vs-card' + (trigger ? ' is-trigger' : '')} data-card={lane + ':' + age} data-play={play} data-age={age} data-dashed={dashed ? '1' : '0'}
-      data-act="vs-card" title={'Open ' + p.name} onClick={() => openDef('plays', play)}>
-      <span className="nm">{p.name}</span>
-      <StepPills steps={p.steps} />
-    </button>
+    <PlayCard name={p.name} steps={<StepPills steps={p.steps} />} outline={dashed ? 'dashed' : 'solid'} fill={dashed ? 'page' : undefined} marked={trigger}
+      anchor={lane + ':' + age} data-play={play} data-age={age} data-dashed={dashed ? '1' : '0'} data-act="vs-card" title={'Open ' + p.name}
+      onClick={() => openDef('plays', play)} />
   );
 }
 
@@ -72,78 +76,56 @@ function branchLabel(b: Branch, planId: string, side: 'mine' | 'theirs') {
 
 // The lines, measured from the page after layout: spines, branches leaving and
 // rejoining, and dashed trigger lines with their labels.
-interface Drawn { spines: { d: string; mine: boolean }[]; branches: { d: string; mine: boolean }[]; triggers: { d: string; x: number; y: number; text: string }[] }
-const NONE: Drawn = { spines: [], branches: [], triggers: [] };
-function useLines(host: React.RefObject<HTMLDivElement | null>, their: GamePlan, mine: GamePlan): Drawn {
-  const [drawn, setDrawn] = useState<Drawn>(NONE);
-  const [, setTick] = useState(0);
-  useEffect(() => {
-    const on = () => setTick((t) => t + 1);
-    window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
-  }, []);
-  useLayoutEffect(() => {
-    const el = host.current;
-    let next = NONE;
-    if (el && window.innerWidth >= 1100) {
-      const box = el.getBoundingClientRect();
-      const rel = (r: DOMRect) => ({ l: r.left - box.left, r: r.right - box.left, t: r.top - box.top, b: r.bottom - box.top, m: r.top + r.height / 2 - box.top, c: r.left + r.width / 2 - box.left });
-      const q = (sel: string) => { const n = el.querySelector<HTMLElement>(sel); return n ? rel(n.getBoundingClientRect()) : null; };
-      const colLeft = (a: Age) => (q('[data-lane="ts"] [data-cell="' + a + '"]') || { l: 0 }).l;
-      const R = 10;
-      const elbow = (x1: number, y1: number, xm: number, y2: number, x2: number) => {
-        // Horizontal to xm, vertical to y2, horizontal to x2, with rounded corners.
-        const dy = y2 - y1, s = dy > 0 ? 1 : -1, r = Math.min(R, Math.abs(dy) / 2);
-        const sx1 = xm >= x1 ? 1 : -1, sx2 = x2 >= xm ? 1 : -1;
-        if (Math.abs(dy) < 1) return `M${x1} ${y1} H${x2}`;
-        return `M${x1} ${y1} H${xm - sx1 * r} Q${xm} ${y1} ${xm} ${y1 + s * r} V${y2 - s * r} Q${xm} ${y2} ${xm + sx2 * r} ${y2} H${x2}`;
-      };
-      const spines: Drawn['spines'] = [], branches: Drawn['branches'] = [], triggers: Drawn['triggers'] = [];
-      const sides: [string, string, GamePlan, boolean][] = [['ts', 'tb', their, false], ['ms', 'mb', mine, true]];
-      sides.forEach(([spineId, prefix, g, isMine]) => {
-        const lane = q('[data-lane="' + spineId + '"]');
-        const label = q('[data-lane="' + spineId + '"] .vs-label');
-        if (!lane || !label) return;
-        const y = lane.m;
-        spines.push({ d: `M${label.r - 24} ${y} H${box.width - 8}`, mine: isMine });
-        L.branchesOf(g.id).forEach((b) => {
-          const ages = AGES.filter((a) => b.stages[a] && STAGE_AGES.includes(a));
-          const first = ages[0], last = ages[ages.length - 1];
-          if (!first || !last) return;
-          const c1 = q('[data-card="' + prefix + ':' + b.id + ':' + first + '"]');
-          const c2 = q('[data-card="' + prefix + ':' + b.id + ':' + last + '"]');
-          if (!c1 || !c2) return;
-          const xDep = colLeft(first) - 28;
-          branches.push({ d: elbow(xDep - 1, y, xDep, c1.m, c1.l), mine: isMine });
-          if (b.rejoins && STAGE_AGES.includes(b.rejoins)) {
-            const xRej = colLeft(b.rejoins) - 28;
-            branches.push({ d: elbow(c2.r, c2.m, xRej, y, xRej + 1), mine: isMine });
-          } else {
-            branches.push({ d: `M${c2.r} ${c2.m} H${c2.r + 18}`, mine: isMine });
-          }
-          // Your trigger: from the first card on their side that shows it, to where this branch leaves.
-          if (isMine && b.trigger) {
-            const hit = [...el.querySelectorAll<HTMLElement>('[data-side="theirs"] [data-card]')].find((n) => L.triggerMatches(b.trigger, n.dataset.play || '', (n.dataset.age || 'dark') as Age));
-            if (hit) {
-              const h = rel(hit.getBoundingClientRect());
-              const sx = xDep < h.l ? h.l : xDep > h.r ? h.r : h.c;
-              const d = (sx === h.c ? `M${xDep} ${h.b}` : `M${sx} ${h.m} H${xDep}`) + ` V${c1.m}`;
-              triggers.push({ d, x: xDep, y: ((sx === h.c ? h.b : h.m) + c1.m) / 2, text: 'You scout ' + L.triggerText({ ...b.trigger, civ: null }).replace(/ in [A-Z][a-z]+ Age$/, '').toLowerCase() });
-            }
-          }
-        });
-      });
-      next = { spines, branches, triggers };
-    }
-    if (JSON.stringify(next) !== JSON.stringify(drawn)) setDrawn(next);
+interface Drawn { lines: Line[]; labels: LineLabel[] }
+const NONE: Drawn = { lines: [], labels: [] };
+const R = 10;
+function measureBoard(el: HTMLElement, their: GamePlan, mine: GamePlan): Drawn {
+  const host = el.getBoundingClientRect();
+  const q = (sel: string): Box | null => { const n = el.querySelector<HTMLElement>(sel); return n ? boxIn(n.getBoundingClientRect(), host) : null; };
+  const colLeft = (a: Age) => (q('[data-lane="ts"] [data-cell="' + a + '"]') || { l: 0 }).l;
+  const lines: Line[] = [], labels: LineLabel[] = [];
+  const sides: [string, string, GamePlan, boolean][] = [['ts', 'tb', their, false], ['ms', 'mb', mine, true]];
+  sides.forEach(([spineId, prefix, g, isMine]) => {
+    const lane = q('[data-lane="' + spineId + '"]');
+    const label = q('[data-lane="' + spineId + '"] .vs-label');
+    if (!lane || !label) return;
+    const tone = isMine ? 'strong' as const : 'soft' as const;
+    const y = lane.m;
+    lines.push({ d: `M${label.r - 24} ${y} H${host.width - 8}`, tone, weight: 'heavy' });
+    L.branchesOf(g.id).forEach((b) => {
+      const ages = AGES.filter((a) => b.stages[a] && STAGE_AGES.includes(a));
+      const first = ages[0], last = ages[ages.length - 1];
+      if (!first || !last) return;
+      const c1 = q('[data-card="' + prefix + ':' + b.id + ':' + first + '"]');
+      const c2 = q('[data-card="' + prefix + ':' + b.id + ':' + last + '"]');
+      if (!c1 || !c2) return;
+      const xDep = colLeft(first) - 28;
+      lines.push({ d: elbow(xDep - 1, y, xDep, c1.m, c1.l, R), tone, weight: 'bold' });
+      if (b.rejoins && STAGE_AGES.includes(b.rejoins)) {
+        const xRej = colLeft(b.rejoins) - 28;
+        lines.push({ d: elbow(c2.r, c2.m, xRej, y, xRej + 1, R), tone, weight: 'bold' });
+      } else {
+        lines.push({ d: `M${c2.r} ${c2.m} H${c2.r + 18}`, tone, weight: 'bold' });
+      }
+      // Your trigger: from the first card on their side that shows it, to where this branch leaves.
+      if (isMine && b.trigger) {
+        const hit = [...el.querySelectorAll<HTMLElement>('[data-side="theirs"] [data-card]')].find((n) => L.triggerMatches(b.trigger, n.dataset.play || '', (n.dataset.age || 'dark') as Age));
+        if (hit) {
+          const h = boxIn(hit.getBoundingClientRect(), host);
+          const sx = xDep < h.l ? h.l : xDep > h.r ? h.r : h.c;
+          const d = (sx === h.c ? `M${xDep} ${h.b}` : `M${sx} ${h.m} H${xDep}`) + ` V${c1.m}`;
+          lines.push({ d, tone: 'strong', weight: 'fine', dashed: true });
+          labels.push({ x: xDep, y: ((sx === h.c ? h.b : h.m) + c1.m) / 2, text: 'You scout ' + L.triggerText({ ...b.trigger, civ: null }).replace(/ in [A-Z][a-z]+ Age$/, '').toLowerCase() });
+        }
+      }
+    });
   });
-  return drawn;
+  return { lines, labels };
 }
 
-function Board({ their, mine }: { their: GamePlan; mine: GamePlan }) {
-  const v = S.ui.versus;
+function Board({ v, their, mine }: { v: VersusPicks; their: GamePlan; mine: GamePlan }) {
   const host = useRef<HTMLDivElement | null>(null);
-  const drawn = useLines(host, their, mine);
+  const drawn = useMeasured(host, (el) => measureBoard(el, their, mine), NONE);
   const ans = L.answerFor(their.id, mine.id, v.me || null, v.them || null);
   const a = ans ? ans[1] : null;
   const myBranches = L.branchesOf(mine.id);
@@ -180,12 +162,7 @@ function Board({ their, mine }: { their: GamePlan; mine: GamePlan }) {
   });
   return (
     <div className="vs-board" ref={host}>
-      <svg className="vs-lines" aria-hidden="true">
-        {drawn.spines.map((x, i) => <path key={'s' + i} className={'spine' + (x.mine ? ' mine' : '')} d={x.d} />)}
-        {drawn.branches.map((x, i) => <path key={'b' + i} className={'branch' + (x.mine ? ' mine' : '')} d={x.d} />)}
-        {drawn.triggers.map((x, i) => <path key={'t' + i} className="trigger" d={x.d} />)}
-      </svg>
-      {drawn.triggers.map((x, i) => <span key={'tl' + i} className="vs-tlabel" style={{ left: x.x, top: x.y }}>{x.text}</span>)}
+      <LineLayer lines={drawn.lines} labels={drawn.labels} />
       <div className="vs-heads">
         <span />
         {STAGE_AGES.map((age) => <span key={age} className="label" data-cell={age}>{STAGE_NAME[age]}</span>)}
@@ -211,10 +188,14 @@ function Board({ their, mine }: { their: GamePlan; mine: GamePlan }) {
   );
 }
 
-export function VersusView() {
-  const v = S.ui.versus;
-  if (!v.me) v.me = S.ui.check.me;
-  if (!v.them) v.them = S.ui.check.opp;
+export function VersusPage() {
+  useStore();
+  const { search } = useLocation();
+  const v = pairingFrom(search);
+  useEffect(() => { if (search) rememberPairing(v); });
+  // /versus on its own reopens the last pairing.
+  if (!search && hasLastPairing()) return <Navigate replace to={paths.versus(lastPairing())} />;
+  const set = (patch: Partial<VersusPicks>) => showPairing({ ...v, ...patch }, true);
   const their = isActive(L.plan(v.their)) ? L.plan(v.their) : null;
   const mine = isActive(L.plan(v.mine)) ? L.plan(v.mine) : null;
   const ans = their && mine ? L.answerFor(their.id, mine.id, v.me || null, v.them || null) : null;
@@ -226,14 +207,14 @@ export function VersusView() {
         <div className="vs-pick">
           <div className="vs-side-pick">
             <span className="label">Them</span>
-            <CivSelect id="vs-them" value={v.them} onChange={(x) => { v.them = x; savePrefs(); }} />
-            <PlanSelect id="vs-their" civ={v.them} value={their ? their.id : ''} mine={false} onPick={(x) => { v.their = x; }} />
+            <CivSelect id="vs-them" value={v.them} onChange={(x) => set({ them: x })} />
+            <PlanSelect id="vs-their" civ={v.them} value={their ? their.id : ''} mine={false} onPick={(x) => set({ their: x })} />
           </div>
-          <button type="button" className="icon-btn vs-swap" data-act="vs-swap" aria-label="Swap sides" title="Swap sides" onClick={swapSides}><Icon name="swap" /></button>
+          <button type="button" className="icon-btn vs-swap" data-act="vs-swap" aria-label="Swap sides" title="Swap sides" onClick={() => swapSides(v)}><Icon name="swap" /></button>
           <div className="vs-side-pick">
             <span className="label">You</span>
-            <CivSelect id="vs-me" value={v.me} onChange={(x) => { v.me = x; savePrefs(); }} />
-            <PlanSelect id="vs-mine" civ={v.me} value={mine ? mine.id : ''} mine onPick={(x) => { v.mine = x; }} />
+            <CivSelect id="vs-me" value={v.me} onChange={(x) => set({ me: x })} />
+            <PlanSelect id="vs-mine" civ={v.me} value={mine ? mine.id : ''} mine onPick={(x) => set({ mine: x })} />
           </div>
           <div className="vs-key">
             <span><span className="sw spine" />Spine</span>
@@ -243,7 +224,7 @@ export function VersusView() {
           </div>
         </div>
         {their && mine
-          ? <Board their={their} mine={mine} />
+          ? <Board v={v} their={their} mine={mine} />
           : <p className="empty">{!their ? 'Pick their game plan. The list starts with the ones documented for ' + (v.them ? L.civShort(v.them) : 'their civ') + '.' : 'Pick your game plan, or make a new one from the list.'}</p>}
         {their && mine && (
           <section className="vs-answer panel">

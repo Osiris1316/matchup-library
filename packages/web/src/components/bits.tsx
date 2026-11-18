@@ -1,4 +1,5 @@
 // Small shared pieces: page head, segmented control, list rows, selects.
+import { Link } from 'react-router';
 import type { ReactNode } from 'react';
 import { isActive, plural, type DefType } from '@matchup-library/core';
 import { L, S, backSheet, closeSheet, openSheet, emit } from '../store';
@@ -6,11 +7,12 @@ import { openDef, toggleDefActive } from '../actions';
 import { Icon } from './Icon';
 import { Flag, hasFlag } from './Flag';
 
+// back: the path the back arrow goes to.
 export function PageHead({ title, aside, back, mark, flag }: { title: ReactNode; aside?: ReactNode; back?: string; mark?: string; flag?: ReactNode }) {
   return (
     <header className="head">
       <div className="head-row">
-        {back && <a className="back" href={'#' + back} aria-label="Back"><Icon name="back" size={18} w={2} /></a>}
+        {back && <Link className="back" to={back} aria-label="Back"><Icon name="back" size={18} w={2} /></Link>}
         {mark && <span className="mark" aria-hidden="true">{mark}</span>}
         {flag}
         <h1>{title}</h1>

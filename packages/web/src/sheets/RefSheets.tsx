@@ -6,7 +6,7 @@ import { Flag } from '../components/Flag';
 import { Builder } from '../components/pickers';
 import { PlanStages } from '../components/Pill';
 import { CivSelect, CloseBtn, Field, MapGroups, Seg } from '../components/bits';
-import { GameTitle, OUTCOME } from '../views/RefsView';
+import { GameTitle, OUTCOME } from '../components/refs';
 
 const REF_TITLE: Record<RefKind, string> = { mine: 'Your game', game: "Someone else's game", guide: 'Guide' };
 const SHOWS: [Shows, string][] = [['threat', 'Doing it'], ['response', 'Answering it'], ['both', 'Both']];

@@ -1,55 +1,22 @@
-// Civs, and one civ's page with its tags.
-import { AGES, ITEM_WORD, STAGE_NAME, byName, guideTitle, isActive, lookOf, placeKey, plural, tagField, tagTargetId, targetField, targetId, type Civ, type ItemKind, type TagWithId, type UseLook } from '@matchup-library/core';
-import { L, S, civIdFromView, civSlug, emit, savePrefs } from '../store';
-import { copyFromParent, openBulk, openDef, openTagSheet, restoreTag, toggleDefActive } from '../actions';
-import { Flag, hasFlag } from '../components/Flag';
-import { Icon } from '../components/Icon';
-import { NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../components/bits';
-import { PlanStages, SplitPill, StepPills } from '../components/Pill';
+// One civ's page: its stages (plays per age and game plans), or its tags.
+import { Link, useParams } from 'react-router';
+import { AGES, ITEM_WORD, STAGE_NAME, guideTitle, lookOf, placeKey, plural, tagField, tagTargetId, targetField, targetId, type ItemKind, type TagWithId, type UseLook } from '@matchup-library/core';
+import { L, S, emit, savePrefs, useStore, type CivTab } from '../../store';
+import { copyFromParent, openBulk, openDef, openTagSheet, restoreTag } from '../../actions';
+import { civIdFromSlug, paths } from '../../app/paths';
+import { go } from '../../app/navigation';
+import { Flag, hasFlag } from '../../components/Flag';
+import { Icon } from '../../components/Icon';
+import { PageHead, Seg } from '../../components/bits';
+import { PlanStages, SplitPill, StepPills } from '../../components/Pill';
 import { CivStages } from './CivStages';
-import type { CivTab } from '../store';
 
-export function CivsView() {
-  const u = S.ui.civs;
-  const all = S.data.defs.civs.filter((c) => isActive(c) || u.showRetired);
-  const bases = all.filter((c) => !c.parent || !L.civ(c.parent)).sort(byName);
-  const row = (c: Civ, variant: boolean) => {
-    const retired = !isActive(c);
-    return (
-      <div key={c.id} className={'lrow' + (variant ? ' variant' : '') + (retired ? ' retired' : '')}>
-        {retired
-          ? <>
-              <button type="button" className="main-btn" data-act="df-open" data-type="civs" data-id={c.id} onClick={() => openDef('civs', c.id)}><span className="t">{c.name} (retired)</span></button>
-              <button type="button" className="pill-btn" data-act="df-restore" data-type="civs" data-id={c.id} aria-label={'Restore ' + c.name} onClick={() => toggleDefActive('civs', c.id)}><span className="pill">Restore</span></button>
-            </>
-          : <>
-              {hasFlag(c.id) && <span className="lead-flag"><Flag id={c.id} /></span>}
-              <a className="main-btn" href={'#civ-' + civSlug(c.id)}><span className="t">{c.name}</span><span className="s">{L.civTagSummary(c.id)}</span></a>
-            </>}
-      </div>
-    );
-  };
-  return (
-    <>
-      <PageHead title="Civs" aside={<UpkeepLink />} />
-      <main className="main">
-        <section className="block">
-          <p className="hint">Open a civ to tag what it does, anywhere or only in some places. Variants sit under their base civ.</p>
-          <div className="list">
-            {bases.map((b) => [row(b, false), ...all.filter((v) => v.parent === b.id).sort(byName).map((v) => row(v, true))])}
-          </div>
-          <NewButton type="civs" word="civ" />
-          <RetiredToggle act="civs-retired" on={u.showRetired} count={S.data.defs.civs.filter((c) => !isActive(c)).length} onToggle={() => { u.showRetired = !u.showRetired; emit(); }} />
-        </section>
-      </main>
-    </>
-  );
-}
-
-export function CivView() {
-  const cid = civIdFromView();
+export function CivPage({ tab }: { tab: CivTab }) {
+  useStore();
+  const { civ: slug = '' } = useParams();
+  const cid = civIdFromSlug(slug);
   const c = L.civ(cid);
-  if (!c) return <><PageHead title="Civ" back="civs" /><main className="main"><p className="empty">That civ isn't in the library.</p></main></>;
+  if (!c) return <><PageHead title="Civ" back={paths.civs()} /><main className="main"><p className="empty">That civ isn't in the library.</p></main></>;
   const mine = L.allTags().filter((t) => t.civ === cid);
   const active = mine.filter((t) => t.active !== false);
   const retired = mine.filter((t) => t.active === false);
@@ -91,15 +58,17 @@ export function CivView() {
   const parentTags = parent ? L.activeTags().filter((t) => t.civ === parent.id) : [];
   const u = S.ui.civ;
   const mark = c.short && c.short !== c.name ? c.short : '';
+  // The tab is part of the address; the last one used is what links to a civ open on.
+  if (u.tab !== tab) { u.tab = tab; savePrefs(); }
   const tabs = (
-    <Seg label="Show" act="cv-tab" options={[['stages', 'Stages'], ['tags', 'Tags']] as [CivTab, string][]} current={u.tab}
-      onPick={(v) => { u.tab = v; savePrefs(); emit(); }} />
+    <Seg label="Show" act="cv-tab" options={[['stages', 'Stages'], ['tags', 'Tags']] as [CivTab, string][]} current={tab}
+      onPick={(v) => go(paths.civ(cid, v), { replace: true, keepScroll: true })} />
   );
   const head = (
-    <PageHead title={c.name} back="civs" mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
+    <PageHead title={c.name} back={paths.civs()} mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
       aside={<button type="button" className="head-link" data-act="cv-edit" onClick={() => openDef('civs', cid)}>Edit civ</button>} />
   );
-  if (u.tab === 'stages') return <>{head}<main className="main stages-main"><CivStages cid={cid} tabs={tabs} /></main></>;
+  if (tab === 'stages') return <>{head}<main className="main stages-main"><CivStages cid={cid} tabs={tabs} /></main></>;
   return (
     <>
       {head}
@@ -157,9 +126,9 @@ export function CivView() {
               </div>
             : <p className="hint">None. Retired tags wait here with their notes.</p>)}
         </section>
-        <a className="btn btn-outline" href="#check" data-act="cv-to-check" onClick={() => { S.ui.check.opp = cid; if (S.ui.check.seg === 'mine') S.ui.check.seg = 'plans'; savePrefs(); }}>
+        <Link className="btn btn-outline" to={paths.check()} data-act="cv-to-check" onClick={() => { S.ui.check.opp = cid; if (S.ui.check.seg === 'mine') S.ui.check.seg = 'plans'; savePrefs(); }}>
           See {c.short || c.name} in Check
-        </a>
+        </Link>
       </main>
     </>
   );

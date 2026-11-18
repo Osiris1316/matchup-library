@@ -2,6 +2,8 @@
 // emit() to re-render. Components read it directly. This mirrors how the first
 // version worked, so the saving and undo logic carries over unchanged.
 import { useSyncExternalStore } from 'react';
+import { isKnownPath, legacyPath, refFromPath, type CivTab } from './app/paths';
+import { currentPath } from './app/navigation';
 import {
   Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type Intent, type ItemKind, type LibraryData,
   type Outcome, type Place, type PlaceKind, type PlanStatus, type Prep, type Shows, type Stage
@@ -75,7 +77,7 @@ export type LibrarySeg = 'elements' | 'plays' | 'gamePlans' | 'landmarks';
 export type MapsSeg = 'maps' | 'features' | 'mapTypes';
 export type CheckSeg = 'plans' | 'plays' | 'elements' | 'mine';
 export type RefsSeg = 'all' | 'mine' | 'games' | 'guides';
-export type CivTab = 'stages' | 'tags';
+export type { CivTab };
 // What's picked on the civ stages page: one play, or a game plan and its plays.
 export type CivSel = { kind: 'play' | 'plan'; id: string };
 
@@ -86,17 +88,19 @@ export const S = {
   loadedAt: 0,
   data: { defs: emptyDefs(), tags: {}, games: {}, links: {}, answers: {}, settings: {} } as LibraryData,
   changes: {} as Record<string, ChangeEntry>,
-  view: 'library',
-  lastView: null as string | null,
+  // The page to reopen on the next visit (the address is the source of truth for
+  // which page is showing; see app/router.tsx).
+  lastPath: null as string | null,
   ui: {
     // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
     library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
     civs: { showRetired: false },
     // sel belongs to the civ in selFor; another civ's page starts with nothing picked.
+    // tab: the civ page links open on, remembered from the last one used.
     civ: { showRetired: false, tab: 'stages' as CivTab, sel: null as CivSel | null, selFor: '', place: 'any:', showParts: false, showOpen: true },
     maps: { seg: 'maps' as MapsSeg, showRetired: false },
     check: { me: 'chinese', opp: 'ottomans', place: 'any:', seg: 'plays' as CheckSeg, showElsewhere: false },
-    // The Versus page: their civ and game plan, yours.
+    // The last Versus pairing, to reopen /versus on. The address holds the one showing.
     versus: { them: '', their: '', me: '', mine: '' },
     refs: { seg: 'all' as RefsSeg, url: '' }
   },
@@ -146,12 +150,15 @@ export function showToast(text: string, warn = false, undoId: string | null = nu
 const PREFS = 'matchup-library-prefs-v2';
 export function loadPrefs(): void {
   try {
-    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; versus?: Partial<typeof S.ui.versus>; lastView?: string; ref?: typeof S.refDefaults };
+    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; versus?: Partial<typeof S.ui.versus>;
+      lastPath?: string; lastView?: string; ref?: typeof S.refDefaults };
     if (p.check) Object.assign(S.ui.check, p.check);
     if (p.versus) Object.assign(S.ui.versus, p.versus);
     if (p.civ && (p.civ.tab === 'stages' || p.civ.tab === 'tags')) S.ui.civ.tab = p.civ.tab;
     if (p.civ && typeof p.civ.showOpen === 'boolean') S.ui.civ.showOpen = p.civ.showOpen;
-    if (p.lastView) S.lastView = p.lastView;
+    // lastView is the first version's name for it, as a hash route.
+    const last = p.lastPath || (p.lastView ? legacyPath('#' + p.lastView) : null);
+    if (last && isKnownPath(last)) S.lastPath = last;
     if (p.ref) S.refDefaults = p.ref;
   } catch { /* storage unavailable */ }
 }
@@ -159,21 +166,19 @@ export function savePrefs(): void {
   try {
     const c = S.ui.check;
     localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen }, versus: S.ui.versus,
-      lastView: S.view.startsWith('ref-') ? 'refs' : S.view, ref: S.refDefaults }));
+      lastPath: S.lastPath, ref: S.refDefaults }));
   } catch { /* storage unavailable */ }
 }
 
-// ---------------------------------------------------------------- routes
-const VIEWS = ['library', 'civs', 'maps', 'refs', 'versus', 'check'];
-export function route(): void {
-  const h = (location.hash || '').replace(/^#/, '');
-  const ok = (v: string | null): v is string => !!v && (VIEWS.includes(v) || v.startsWith('civ-') || v.startsWith('ref-'));
-  S.view = ok(h) ? h : ok(S.lastView) ? S.lastView : 'library';
+// ---------------------------------------------------------------- moving between pages
+// Called by the layout whenever the address changes: a new page starts with no
+// sheet open and no stale toast, and becomes the page to reopen next time.
+export function onPageChange(): void {
+  const path = currentPath();
   S.sheet = null;
   if (!(S.toast && Date.now() - S.toast.at < 1500)) S.toast = null;
+  // A reference reopens as the references list; it may be gone by next time.
+  if (isKnownPath(path)) S.lastPath = refFromPath(path) ? '/refs' : path;
   savePrefs();
   emit();
-  window.scrollTo(0, 0);
 }
-export const civSlug = (id: string): string => String(id).replace(/_/g, '-');
-export const civIdFromView = (): string => S.view.slice(4).replace(/-/g, '_');

@@ -63,6 +63,9 @@ importers:
       react-dom:
         specifier: 19.1.10
         version: 19.1.10(react@19.1.10)
+      react-router:
+        specifier: 7.18.6
+        version: 7.18.6(react-dom@19.1.10(react@19.1.10))(react@19.1.10)
     devDependencies:
       '@types/react':
         specifier: 19.3.0
@@ -79,6 +82,9 @@ importers:
       vite:
         specifier: 6.4.5
         version: 6.4.5(tsx@4.23.15)
+      vitest:
+        specifier: 4.1.12
+        version: 4.1.12(vite@6.4.5(tsx@4.23.15))
 
 packages:
 
@@ -1125,6 +1131,16 @@ packages:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
 
+  react-router@7.18.6:
+    resolution: {integrity: sha512-SP8KqKfRLlJzqzPseC+r6yYFsqPEavtQCC4BKV810tBGijjESLtwVPam+gPOO+wYeXrYN/TNy2CAykQVcNg4iQ==}
+    engines: {node: '>=20.0.0'}
+    peerDependencies:
+      react: '>=18'
+      react-dom: '>=18'
+    peerDependenciesMeta:
+      react-dom:
+        optional: true
+
   react@19.1.10:
     resolution: {integrity: sha512-xLes4RnWjC02mmkdHO2GPNjO0le6RMBPLYWKMaMf4jUIMFjTqrYBobxWAh8rU0pjfefJ6OLdef9zbYj+7iXH9Q==}
     engines: {node: '>=0.10.0'}
@@ -1152,6 +1168,9 @@ packages:
     resolution: {integrity: sha512-9lpSSU4Mly3mrtruwLs1eLK6+gzbzqeBFwRNjIjE+9LuDpWdYctrQlQ3ej1Ilgi7gknpsTRnPoLP8DpCHqHIJw==}
     engines: {node: '>=10'}
     hasBin: true
+
+  set-cookie-parser@2.7.3:
+    resolution: {integrity: sha512-irZHtTqurLna57KQG/s+fzOwv/J6XSH4cs8M/vsrY3uCaQ3S6+QJguAH0WdN47SXlk82voMZ4naWMQf8fdEoIg==}
 
   sharp@0.35.5:
     resolution: {integrity: sha512-Ywn4OnzGukp7CDMrp08RQ50YKmuwG47brZgIVPTvBaaAfQlRlygrRqSrxdCiL9M+LlzLBiJ68IR1QqvzHyjC7g==}
@@ -2218,6 +2237,14 @@ snapshots:
 
   react-refresh@0.17.0: {}
 
+  react-router@7.18.6(react-dom@19.1.10(react@19.1.10))(react@19.1.10):
+    dependencies:
+      cookie: 1.1.1
+      react: 19.1.10
+      set-cookie-parser: 2.7.3
+    optionalDependencies:
+      react-dom: 19.1.10(react@19.1.10)
+
   react@19.1.10: {}
 
   require-directory@2.1.1: {}
@@ -2263,6 +2290,8 @@ snapshots:
   semver@6.3.2: {}
 
   semver@7.8.6: {}
+
+  set-cookie-parser@2.7.3: {}
 
   sharp@0.35.5:
     dependencies:

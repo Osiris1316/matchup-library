@@ -7,6 +7,8 @@ import {
   type Link, type Mark, type Place, type Play, type Step, type Tag
 } from '@matchup-library/core';
 import { commit } from './api/client';
+import { paths, refFromPath, refPath } from './app/paths';
+import { currentPath, go } from './app/navigation';
 import {
   L, S, emit, nextSid, openSheet, savePrefs, showToast,
   type DefDraft, type DefSheet, type MomentDraft, type PlaceDraft, type RefDraft, type RefKind, type Sheet
@@ -33,10 +35,13 @@ export const setPlaceKind = (owner: { place: PlaceDraft }, k: PlaceDraft['kind']
 // References in the address bar
 // ---------------------------------------------------------------------------
 export type RefCtx = { kind: 'game'; id: string; g: Game } | { kind: 'guide'; id: string; l: Link };
+// The game or guide whose page is showing, if any.
 export function refFromView(): RefCtx | null {
-  if (S.view.startsWith('ref-game-')) { const id = S.view.slice(9); const g = S.data.games[id]; return g ? { kind: 'game', id, g } : null; }
-  if (S.view.startsWith('ref-guide-')) { const id = S.view.slice(10); const l = S.data.links[id]; return l && !l.gameId ? { kind: 'guide', id, l } : null; }
-  return null;
+  const r = refFromPath(currentPath());
+  if (!r) return null;
+  if (r.kind === 'game') { const g = S.data.games[r.id]; return g ? { kind: 'game', id: r.id, g } : null; }
+  const l = S.data.links[r.id];
+  return l && !l.gameId ? { kind: 'guide', id: r.id, l } : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -604,7 +609,7 @@ export async function saveRefDetails(): Promise<void> {
   if (isNew) S.ui.refs.url = '';
   savePrefs();
   await commit((isNew ? 'Added ' : 'Edited ') + title, writes, isNew ? 'Added ' + title + '. Now add its moments.' : 'Saved ' + title + '.');
-  if (isNew) location.hash = route;
+  if (isNew) go(refPath(route));
 }
 
 export async function deleteRef(): Promise<void> {
@@ -616,7 +621,7 @@ export async function deleteRef(): Promise<void> {
   else { writes = [{ path: 'games/' + id, data: null }, ...L.gameLinks(id).map((l) => ({ path: 'links/' + l.id, data: null }))]; title = L.refTitleGame(S.data.games[id] as Game); }
   S.sheet = null;
   await commit('Deleted ' + title, writes, 'Deleted ' + title + '.');
-  location.hash = 'refs';
+  go(paths.refs());
 }
 
 // ---------------------------------------------------------------------------

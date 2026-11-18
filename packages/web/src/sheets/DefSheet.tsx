@@ -1,6 +1,7 @@
 // Edit or add a definition: play, game plan, kind, feature, map, map type or civ.
 // Elements are edited beside the list in the Library (views/ElementEditor.tsx),
 // which reuses the civ, "comes up on" and references fields from here.
+import { Link } from 'react-router';
 import { AGE_NAME, STAGE_AGES, STAGE_NAME, byName, guideTitle, isActive, parsePlace, placeKey, tagField, tagTargetId, type Age, type Block, type ItemKind, type PlanStatus } from '@matchup-library/core';
 import { L, S, bind, emit, toggleIn, type DefDraft, type DefSheet as DefSheetT } from '../store';
 import { DEF_WORD, draftBlockers, openDef, saveDef, toggleDefActive } from '../actions';
@@ -9,7 +10,8 @@ import { Flag } from '../components/Flag';
 import { AgeSeg, Builder, MultiSelect, type MsOption } from '../components/pickers';
 import { CloseBtn, Field, Seg } from '../components/bits';
 import { StepPills } from '../components/Pill';
-import { GameTitle } from '../views/RefsView';
+import { GameTitle } from '../components/refs';
+import { refPath } from '../app/paths';
 import { openBranch, openVersus } from '../versus';
 
 // Which civs do it: ticking one tags it anywhere. blocksFor says what a civ
@@ -66,7 +68,7 @@ export function RefsSection({ field, id }: { field: ItemKind; id: string }) {
       <div className="list">
         {rows.slice(0, 12).map((r, i) => (
           <div key={i} className="lrow">
-            <a className="main-btn" href={'#' + r.route}><span className="t fw5">{r.game ? <GameTitle g={r.game} /> : r.guide ? guideTitle(r.guide) : ''}</span><span className="s">{r.sub}</span></a>
+            <Link className="main-btn" to={refPath(r.route)}><span className="t fw5">{r.game ? <GameTitle g={r.game} /> : r.guide ? guideTitle(r.guide) : ''}</span><span className="s">{r.sub}</span></Link>
           </div>
         ))}
       </div>

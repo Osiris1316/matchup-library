@@ -2,15 +2,19 @@
 // showing the evidence, and its game plans underneath. Picking a game plan
 // lights up its plays and draws the path between them. Built for a wide
 // screen; on a phone the ages stack and the path isn't drawn.
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useRef } from 'react';
 import {
   STAGE_AGES, STAGE_NAME, isActive, parsePlace, plural, stagesOf, type Age, type ElType, type Intent, type Place, type StageCard, type StageColumn, type StagePlan
 } from '@matchup-library/core';
-import { L, S, emit, openSheet, type CivSel } from '../store';
-import { openDef, openTagSheet } from '../actions';
-import { openVersus } from '../versus';
-import { MapGroups } from '../components/bits';
-import { MiniPill, PillFace, StepPills } from '../components/Pill';
+import { L, S, emit, openSheet, type CivSel } from '../../store';
+import { openDef, openTagSheet } from '../../actions';
+import { openVersus } from '../../versus';
+import { MapGroups } from '../../components/bits';
+import { PillFace, StepPills } from '../../components/Pill';
+import { PlayCard, type CardOutline } from '../../kit/play-card/PlayCard';
+import { LineLayer, type Line } from '../../kit/lines/LineLayer';
+import { useMeasured } from '../../kit/lines/useMeasured';
+import { boxIn, linkBoxes } from '../../kit/lines/geometry';
 
 const TIER_WORD: Record<StageCard['tier'], string> = { documented: 'Standard or tagged', standard: 'Standard or tagged', parts: 'From parts, never seen together', open: 'Not seen: possible, nothing documented' };
 const LEGEND_PILLS: { type: ElType; intent: Intent | null; name: string; text: string }[] = [
@@ -51,17 +55,16 @@ function Legend() {
   );
 }
 
+const OUTLINE: Record<StageCard['tier'], CardOutline> = { documented: 'solid', standard: 'solid', parts: 'dashed', open: 'faint' };
+
 function Card({ cid, age, c, lit }: { cid: string; age: Age; c: StageCard; lit: boolean }) {
   const p = L.play(c.id);
   if (!p) return null;
   const me: CivSel = { kind: 'play', id: c.id };
   return (
-    <button type="button" className="stg-card" data-tier={c.tier} data-stg-card={age + ':' + c.id} data-act="stg-card" data-id={c.id} aria-pressed={lit}
-      onClick={() => pick(same(S.ui.civ.sel, me) ? null : me)}>
-      <span className="top"><span className="nm">{p.name}</span><span className="badge">{L.stageBadge(c)}</span></span>
-      <StepPills steps={p.steps} />
-      {c.blocked.length > 0 && <span className="warn-text small">{L.blockText(cid, c.blocked[0]!)}</span>}
-    </button>
+    <PlayCard name={p.name} badge={L.stageBadge(c)} steps={<StepPills steps={p.steps} />} note={c.blocked.length > 0 ? L.blockText(cid, c.blocked[0]!) : undefined}
+      outline={OUTLINE[c.tier]} picked={lit} anchor={age + ':' + c.id} data-tier={c.tier} data-act="stg-card" data-id={c.id} aria-pressed={lit}
+      onClick={() => pick(same(S.ui.civ.sel, me) ? null : me)} />
   );
 }
 
@@ -86,39 +89,18 @@ function Column({ cid, col, lit }: { cid: string; col: StageColumn; lit: Set<str
 // The path through a picked game plan's plays: right edge of one card, along the
 // gutter, into the left edge of the next. Measured from the page, so it follows
 // cards of any height.
-function usePaths(host: React.RefObject<HTMLDivElement | null>, stages: { age: Age; play: string }[]): string[] {
-  const [paths, setPaths] = useState<string[]>([]);
-  const [tick, setTick] = useState(0);
-  useEffect(() => {
-    const on = () => setTick((t) => t + 1);
-    window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
-  }, []);
-  useLayoutEffect(() => {
-    const el = host.current;
-    const next: string[] = [];
-    if (el && window.innerWidth >= 1100) {
-      const box = el.getBoundingClientRect();
-      const at = (s: { age: Age; play: string }) => el.querySelector<HTMLElement>('[data-stg-card="' + s.age + ':' + s.play + '"]');
-      for (let i = 0; i + 1 < stages.length; i++) {
-        const a = stages[i]!, b = stages[i + 1]!;
-        if (STAGE_AGES.indexOf(b.age) !== STAGE_AGES.indexOf(a.age) + 1) continue;
-        const ea = at(a), eb = at(b);
-        if (!ea || !eb) continue;
-        const ra = ea.getBoundingClientRect(), rb = eb.getBoundingClientRect();
-        const x1 = ra.right - box.left, y1 = ra.top + ra.height / 2 - box.top;
-        const x2 = rb.left - box.left, y2 = rb.top + rb.height / 2 - box.top;
-        const xm = Math.round((x1 + x2) / 2);
-        const dy = y2 - y1, r = Math.min(8, Math.abs(dy) / 2), s = dy > 0 ? 1 : -1;
-        next.push(Math.abs(dy) < 1
-          ? `M${x1} ${y1} H${x2}`
-          : `M${x1} ${y1} H${xm - r} Q${xm} ${y1} ${xm} ${y1 + s * r} V${y2 - s * r} Q${xm} ${y2} ${xm + r} ${y2} H${x2}`);
-      }
-    }
-    if (next.join('|') !== paths.join('|')) setPaths(next);
-  });
-  void tick;
-  return paths;
+function measurePath(el: HTMLElement, stages: { age: Age; play: string }[]): Line[] {
+  const host = el.getBoundingClientRect();
+  const at = (s: { age: Age; play: string }) => el.querySelector<HTMLElement>('[data-card="' + s.age + ':' + s.play + '"]');
+  const out: Line[] = [];
+  for (let i = 0; i + 1 < stages.length; i++) {
+    const a = stages[i]!, b = stages[i + 1]!;
+    if (STAGE_AGES.indexOf(b.age) !== STAGE_AGES.indexOf(a.age) + 1) continue;
+    const ea = at(a), eb = at(b);
+    if (!ea || !eb) continue;
+    out.push({ d: linkBoxes(boxIn(ea.getBoundingClientRect(), host), boxIn(eb.getBoundingClientRect(), host)), tone: 'strong', weight: 'regular' });
+  }
+  return out;
 }
 
 function PlanRow({ cid, x, picked, hasPlay }: { cid: string; x: StagePlan; picked: boolean; hasPlay: boolean }) {
@@ -140,7 +122,7 @@ function PlanRow({ cid, x, picked, hasPlay }: { cid: string; x: StagePlan; picke
             <span className="sublabel phone-only">{STAGE_NAME[a]}</span>
             {p
               ? <>
-                  <span className="spills mini">{p.steps.slice().sort((m, n) => m.step - n.step).map((s, i) => <MiniPill key={i} el={s.el} use={s} />)}</span>
+                  <StepPills steps={p.steps} mini bare wrap={false} />
                   <span className={blocked.length ? 'warn-text' : 'pn'}>{blocked.length ? 'Not open to ' + L.civShort(cid) + ': ' + p.name : p.name}</span>
                 </>
               : <span className="muted">Not set</span>}
@@ -193,7 +175,7 @@ export function CivStages({ cid, tabs }: { cid: string; tabs: React.ReactNode })
   const stages = selPlan ? stagesOf(selPlan).filter(({ age }) => STAGE_AGES.includes(age)).map(({ age, stage }) => ({ age, play: stage.play })) : [];
   const lit = new Set<string>(selPlan ? stages.map((s) => s.play) : sel ? [sel.id] : []);
   const host = useRef<HTMLDivElement | null>(null);
-  const paths = usePaths(host, stages);
+  const paths = useMeasured(host, (el) => measurePath(el, stages), [] as Line[]);
   const documented = plans.filter((x) => x.tier === 'documented');
   const parts = plans.filter((x) => x.tier === 'parts');
   // A picked game plan that isn't documented here still shows, at the top of its list.
@@ -227,9 +209,7 @@ export function CivStages({ cid, tabs }: { cid: string; tabs: React.ReactNode })
         <span className="stg-rule" data-gut="1" aria-hidden="true" />
         <span className="stg-rule" data-gut="2" aria-hidden="true" />
         {columns.map((c) => <Column key={c.age} cid={cid} col={c} lit={lit} />)}
-        {paths.length > 0 && (
-          <svg className="stg-lines" aria-hidden="true">{paths.map((d, i) => <path key={i} d={d} />)}</svg>
-        )}
+        <LineLayer lines={paths} />
       </div>
       <section className="stg-plans" aria-label="Game plans">
         <div className="stg-plans-h">

@@ -1,17 +1,19 @@
 // The Library's element editor and the "where it is used" pane. On a wide
 // screen they sit beside the element list; on a phone they replace it.
+import { Link } from 'react-router';
 import {
   AGES, AGE_NAME, EL_TYPES, EL_TYPE_NAME, INTENTS, INTENT_NAME, STAGE_NAME, byName, isActive, plural, type Age, type DefType, type ElType, type Intent,
   type Place, type SubjectKind
 } from '@matchup-library/core';
-import { L, S, bind, emit, showToast, toggleIn, type DefDraft } from '../store';
-import { closeElement, draftAgesWith, openDef, revertElement, saveElement, toggleDefActive, elementDirty } from '../actions';
-import { Flag } from '../components/Flag';
-import { MultiSelect, type MsOption } from '../components/pickers';
-import { Field } from '../components/bits';
-import { Icon } from '../components/Icon';
-import { PillFace, StepPills, Tile } from '../components/Pill';
-import { CivChips, RefsSection, WhereField } from '../sheets/DefSheet';
+import { L, S, bind, emit, showToast, toggleIn, type DefDraft } from '../../store';
+import { closeElement, draftAgesWith, openDef, revertElement, saveElement, toggleDefActive, elementDirty } from '../../actions';
+import { Flag } from '../../components/Flag';
+import { MultiSelect, type MsOption } from '../../components/pickers';
+import { Field } from '../../components/bits';
+import { paths } from '../../app/paths';
+import { Icon } from '../../components/Icon';
+import { PillFace, StepPills, Tile } from '../../components/Pill';
+import { CivChips, RefsSection, WhereField } from '../../sheets/DefSheet';
 
 // Which subjects suit each type. Anything goes for an element with no type yet.
 const SUBJECT_KINDS: Record<ElType, SubjectKind[]> = {
@@ -45,7 +47,7 @@ function SubjectField({ d }: { d: DefDraft }) {
       <span className="label">Subject, the icon</span>
       <div className="subj-now">
         {sj
-          ? <><Tile look={{ icon: sj.icon, type: isType(d.kind) ? d.kind : null }} /><span className="fw5">{sj.name}</span></>
+          ? <><Tile look={{ icon: sj.icon, type: isType(d.kind) ? d.kind : null }} size="xl" /><span className="fw5">{sj.name}</span></>
           : <span className="muted">No subject</span>}
         <button type="button" className="btn btn-outline" data-act="df-subject-pick" aria-expanded={u.subjectPick} onClick={() => { u.subjectPick = !u.subjectPick; emit(); }}>
           {u.subjectPick ? 'Close' : sj ? 'Change' : 'Pick one'}
@@ -59,7 +61,7 @@ function SubjectField({ d }: { d: DefDraft }) {
           <div className="subj-grid" role="group" aria-label="Subjects">
             {shown.map((x) => (
               <button key={x.id} type="button" data-act="df-subject" data-id={x.id} aria-pressed={x.id === d.subject} onClick={() => pick(x.id)}>
-                <Tile look={{ icon: x.icon, type: isType(d.kind) ? d.kind : null }} />
+                <Tile look={{ icon: x.icon, type: isType(d.kind) ? d.kind : null }} size="xl" />
                 <span>{x.name}</span>
               </button>
             ))}
@@ -263,7 +265,7 @@ export function UsesPane() {
         <h3 className="label">Civs documented doing it</h3>
         {e.universal && <p className="hint">Every civ can{cannot.length ? ', except ' + cannot.join(', ') : ''}. These are the civs with tags, games or guides as well.</p>}
         {civs.length
-          ? <div className="chiprow">{civs.map((c) => <a key={c.id} className="chip" href={'#civ-' + c.id.replace(/_/g, '-')}><Flag id={c.id} />{c.short || c.name}</a>)}</div>
+          ? <div className="chiprow">{civs.map((c) => <Link key={c.id} className="chip" to={paths.civ(c.id, S.ui.civ.tab)}><Flag id={c.id} />{c.short || c.name}</Link>)}</div>
           : <p className="hint">{e.universal ? 'None beyond that.' : 'No civs yet. Tick them in the editor, or tag them on a civ page.'}</p>}
       </section>
       <RefsSection field="el" id={id} />

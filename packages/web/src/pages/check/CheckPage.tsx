@@ -1,10 +1,12 @@
 // Check: what each side is documented doing on a map, and why.
+import { Link } from 'react-router';
 import { STAGE_NAME, isActive, parsePlace, type Evidence, type ItemKind, type Place } from '@matchup-library/core';
-import { L, S, civSlug, emit, openSheet, savePrefs } from '../store';
-import { openTagSheet } from '../actions';
-import { Icon } from '../components/Icon';
-import { CivSelect, Lines, MapGroups, PageHead, Seg, UpkeepLink } from '../components/bits';
-import { PlanStages, SplitPill, StepPills } from '../components/Pill';
+import { L, S, emit, openSheet, savePrefs, useStore } from '../../store';
+import { paths } from '../../app/paths';
+import { openTagSheet } from '../../actions';
+import { Icon } from '../../components/Icon';
+import { CivSelect, Lines, MapGroups, PageHead, Seg, UpkeepLink } from '../../components/bits';
+import { PlanStages, SplitPill, StepPills } from '../../components/Pill';
 
 function CheckCard({ itemKind, id, civ, ev, vp }: { itemKind: ItemKind; id: string; civ: string; ev: Evidence[]; vp: Place }) {
   const def = L.itemDef(itemKind, id);
@@ -35,7 +37,8 @@ function EmptyCheck({ civ, phrase }: { civ: string; phrase: string }) {
   );
 }
 
-export function CheckView() {
+export function CheckPage() {
+  useStore();
   const u = S.ui.check;
   if (!isActive(L.civ(u.me))) u.me = (L.activeCivs()[0] || { id: '' }).id;
   if (!isActive(L.civ(u.opp))) u.opp = (L.activeCivs()[1] || { id: '' }).id;
@@ -113,7 +116,7 @@ export function CheckView() {
         </section>
         <section className="block">
           {body}
-          <a className="btn btn-outline" href={'#civ-' + civSlug(pageCiv)}>{L.civShort(pageCiv)} page</a>
+          <Link className="btn btn-outline" to={paths.civ(pageCiv, S.ui.civ.tab)}>{L.civShort(pageCiv)} page</Link>
         </section>
       </main>
     </>

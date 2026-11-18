@@ -4,12 +4,15 @@
 	"main": "packages/api/src/worker.ts",
 	"compatibility_date": "2026-10-01",
 	// One Worker serves the built page and the API, so one Access setting covers
-	// the whole site. Requests that match a built file are served directly;
-	// everything else (the /api routes) reaches the Worker.
+	// the whole site. /api always reaches the Worker. Anything else that matches
+	// a built file is served directly, and every other page address (/civs/rus,
+	// /versus?...) gets index.html, where the page's router takes over.
 	// Build the page first: `pnpm build:web` (or `pnpm run deploy`, which does both).
 	"assets": {
 		"directory": "./packages/web/dist",
-		"binding": "ASSETS"
+		"binding": "ASSETS",
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
 	},
 	"d1_databases": [
 		{
