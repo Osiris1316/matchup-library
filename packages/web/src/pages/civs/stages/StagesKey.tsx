@@ -27,6 +27,7 @@ export function StagesKey() {
         <span className="label">Cards</span>
         <p className="hint">Each card is one way to play an age. Elements read left to right in the order they happen. The icon names the exact unit, building or landmark; the column gives the age.</p>
         <p className="hint">Pick a card to narrow the page: the rest of its age fades, and other ages keep what a game plan, branch or game has with it. Pick a game plan to fill in all three ages.</p>
+        <p className="hint">While you narrow, each column puts your pick and what goes with it at the top, and folds the groups with nothing but faded cards. Open or fold any group from its heading; what you fold by hand stays folded on every civ.</p>
       </div>
       <div className={s.keyGroup}>
         <span className="label">Tile is type, name is intent</span>

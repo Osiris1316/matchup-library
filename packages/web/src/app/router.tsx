@@ -12,6 +12,7 @@ import { VersusPage } from '../pages/versus/VersusPage';
 import { CheckPage } from '../pages/check/CheckPage';
 import { Layout, NotFound, RouteError, type RouteHandle } from './Layout';
 import { registerNavigator } from './navigation';
+import { motionOk } from '../kit/motion';
 import { paths } from './paths';
 
 const wide: RouteHandle = { wide: true };
@@ -45,7 +46,7 @@ export function createAppRouter() {
     }
   ]);
   registerNavigator(
-    (to, opts) => { void router.navigate(to, { replace: !!opts.replace, preventScrollReset: !!opts.keepScroll }); },
+    (to, opts) => { void router.navigate(to, { replace: !!opts.replace, preventScrollReset: !!opts.keepScroll, viewTransition: !!opts.animate && motionOk() }); },
     () => router.state.location
   );
   return router;

@@ -46,6 +46,8 @@
 
   /* Fixed sizes the layout depends on */
   --nav-height-wide: 53px;
+  /* The sticky page head: 44px row, 8px and 6px padding, 1px border. */
+  --page-head-height: 59px;
   --tap: 44px;
 
   color-scheme: dark;

@@ -1,7 +1,8 @@
 // Moving between pages from code that isn't a component (actions after a save,
 // for instance). The router registers itself here on start, which keeps the
 // actions free of an import cycle through the router and every page.
-export interface GoOptions { replace?: boolean; keepScroll?: boolean }
+// animate: slide what moved into place (see kit/motion.ts).
+export interface GoOptions { replace?: boolean; keepScroll?: boolean; animate?: boolean }
 type Navigator = (to: string, opts: GoOptions) => void;
 
 let navigator: Navigator | null = null;
