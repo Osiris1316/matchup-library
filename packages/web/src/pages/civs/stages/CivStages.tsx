@@ -1,14 +1,15 @@
-// One civ's stages: its plays per age, grouped by family, with the outline
-// showing the evidence. Picking narrows the page: the rest of that age fades,
-// and the other ages keep what a game plan, branch or logged game has with the
-// picks. The rail beside it holds the game plans, your path and your answers.
+// One civ's stages, as your options with that civ: its plays per age, grouped
+// by family, with the outline showing the evidence. Picking narrows the page:
+// the rest of that age fades, and the other ages keep what a game plan, branch
+// or logged game has with the picks. The rail beside it holds your path, the map
+// and the game plans. Matchups (their plan against yours) are for Versus.
 // The picks and the map live in the address. Built for a wide screen; on a
 // phone the rail and the ages stack and no lines are drawn.
 import { useRef } from 'react';
 import { useLocation } from 'react-router';
 import {
-  PLAN_STATUS_NAME, STAGE_AGES, STAGE_NAME, cardState, plural, togglePick,
-  type Age, type CardState, type Picks, type Place, type StageCard, type StageColumn
+  STAGE_AGES, STAGE_NAME, cardState, plural, togglePick,
+  type Age, type CardState, type Picks, type StageCard, type StageColumn
 } from '@matchup-library/core';
 import { L, S, emit, savePrefs } from '../../../store';
 import { paths, readCivView } from '../../../app/paths';
@@ -22,28 +23,18 @@ import { boxIn, linkBoxes } from '../../../kit/lines/geometry';
 import { animate, vtName } from '../../../kit/motion';
 import { StagesRail } from './StagesRail';
 import { StagesKey } from './StagesKey';
-import { myCivFor, pickedAges, picksFrom, placeOk, planRows } from './view';
+import { pickedAges, picksFrom, placeOk, planRows } from './view';
 import { focusOrder, foldAll, isFolded, toggleFold, type FamilyView, type FoldState } from './order';
 import { CivHead } from '../CivHead';
 import s from './CivStages.module.css';
 
 const OUTLINE: Record<StageCard['tier'], CardOutline> = { documented: 'solid', standard: 'solid', parts: 'dashed', open: 'faint' };
 
-// Your answer to one of their plays, as the line under its card.
-function answerLine(cid: string, me: string, age: Age, c: StageCard, vp: Place): { text: string; gap: boolean } | null {
-  if (!me) return null;
-  const hits = L.answersToPlay(me, cid, c.id, age, vp);
-  if (hits.length) return { text: 'Your answer: ' + hits.map((x) => x.branch.name + (x.branch.status ? ' (' + PLAN_STATUS_NAME[x.branch.status] + ')' : '')).join(', '), gap: false };
-  return c.tier === 'documented' || c.tier === 'standard' ? { text: 'No answer yet', gap: true } : null;
-}
-
-function Card({ cid, age, c, state, me, vp, onPick }: { cid: string; age: Age; c: StageCard; state: CardState; me: string; vp: Place; onPick: (age: Age, id: string) => void }) {
+function Card({ cid, age, c, state, onPick }: { cid: string; age: Age; c: StageCard; state: CardState; onPick: (age: Age, id: string) => void }) {
   const p = L.play(c.id);
   if (!p) return null;
-  const ans = answerLine(cid, me, age, c, vp);
   return (
     <PlayCard name={p.name} badge={L.stageBadge(c)} steps={<StepPills steps={p.steps} />} note={c.blocked.length > 0 ? L.blockText(cid, c.blocked[0]!) : undefined}
-      detail={ans ? ans.text : undefined} detailTone={ans && ans.gap ? 'gap' : 'normal'}
       outline={OUTLINE[c.tier]} picked={state === 'picked'} dimmed={state === 'dim'} anchor={age + ':' + c.id}
       data-tier={c.tier} data-state={state} data-act="stg-card" data-id={c.id} aria-pressed={state === 'picked'}
       style={{ viewTransitionName: vtName('card', age, c.id) }} onClick={() => onPick(age, c.id)} />
@@ -78,8 +69,8 @@ function FamilyHead({ cid, age, f, folded, narrowing }: { cid: string; age: Age;
   );
 }
 
-function Column({ cid, col, stateOf, me, vp, narrowing, onPick }: {
-  cid: string; col: StageColumn; stateOf: (age: Age, id: string) => CardState; me: string; vp: Place; narrowing: boolean; onPick: (age: Age, id: string) => void;
+function Column({ cid, col, stateOf, narrowing, onPick }: {
+  cid: string; col: StageColumn; stateOf: (age: Age, id: string) => CardState; narrowing: boolean; onPick: (age: Age, id: string) => void;
 }) {
   const showOpen = S.ui.civ.showOpen;
   const st = foldState(cid);
@@ -97,12 +88,11 @@ function Column({ cid, col, stateOf, me, vp, narrowing, onPick }: {
         return (
           <div key={f.name} className={s.family} data-folded={folded ? '' : undefined}>
             <FamilyHead cid={cid} age={col.age} f={f} folded={folded} narrowing={narrowing} />
-            {cards.map((c) => <Card key={c.id} cid={cid} age={col.age} c={c} state={stateOf(col.age, c.id)} me={me} vp={vp} onPick={onPick} />)}
+            {cards.map((c) => <Card key={c.id} cid={cid} age={col.age} c={c} state={stateOf(col.age, c.id)} onPick={onPick} />)}
           </div>
         );
       })}
       {!families.length && <p className="hint">{col.count ? 'Only plays not seen. Show them from the bar above.' : 'No ' + STAGE_NAME[col.age] + ' plays for ' + L.civShort(cid) + ' yet.'}</p>}
-      {col.closed.length > 0 && <p className="hint">Not open to {L.civShort(cid)} in {STAGE_NAME[col.age]}: {col.closed.join(', ')}.</p>}
       {col.age === 'castle' && <p className="hint">Past early Castle the game comes down to fights and macro, so the library stops here for now.</p>}
     </div>
   );
@@ -133,7 +123,6 @@ export function CivStages({ cid }: { cid: string }) {
   const picks = picksFrom(view);
   const lines = useMeasured(host, (el) => measurePath(el, picks), [] as Line[]);
   const u = S.ui.civ;
-  const me = myCivFor(cid);
   const { columns, plans } = L.civStages(cid, vp);
   const routes = L.civRoutes(cid, vp);
   const rows = planRows(plans, picks);
@@ -169,7 +158,7 @@ export function CivStages({ cid }: { cid: string }) {
       <main className={'main ' + s.page}>
       {u.showKey && <StagesKey />}
       <div className={s.board} ref={host} data-narrowing={narrowing ? '' : undefined}>
-        <StagesRail cid={cid} vp={vp} placeKey={placeKey} picks={picks} rows={rows} routes={routes} me={me} setPicks={setPicks} onMap={(key) => show({ map: key })} />
+        <StagesRail cid={cid} vp={vp} placeKey={placeKey} picks={picks} rows={rows} routes={routes} setPicks={setPicks} onMap={(key) => show({ map: key })} />
         {columns.map((c) => (
           <span key={c.age} className={s.head} data-age={c.age}>
             <span className={s.headName}>{STAGE_NAME[c.age]}</span>
@@ -180,7 +169,7 @@ export function CivStages({ cid }: { cid: string }) {
         <span className={s.gutHead} data-gut="2">Age up</span>
         <span className={s.rule} data-gut="1" aria-hidden="true" />
         <span className={s.rule} data-gut="2" aria-hidden="true" />
-        {columns.map((c) => <Column key={c.age} cid={cid} col={c} stateOf={stateOf} me={me} vp={vp} narrowing={narrowing} onPick={onPick} />)}
+        {columns.map((c) => <Column key={c.age} cid={cid} col={c} stateOf={stateOf} narrowing={narrowing} onPick={onPick} />)}
         <LineLayer lines={lines} />
       </div>
       </main>

@@ -5,8 +5,10 @@ import { L, S, emit, openSheet, savePrefs, useStore } from '../../store';
 import { paths } from '../../app/paths';
 import { openTagSheet } from '../../actions';
 import { Icon } from '../../components/Icon';
-import { CivSelect, Lines, MapGroups, PageHead, Seg, UpkeepLink } from '../../components/bits';
+import { CivSelect, Lines, MapGroups, PageHead, Seg } from '../../components/bits';
 import { PlanStages, SplitPill, StepPills } from '../../components/Pill';
+import { AutoGrid } from '../../kit/layout/AutoGrid';
+import s from './CheckPage.module.css';
 
 function CheckCard({ itemKind, id, civ, ev, vp }: { itemKind: ItemKind; id: string; civ: string; ev: Evidence[]; vp: Place }) {
   const def = L.itemDef(itemKind, id);
@@ -54,9 +56,9 @@ export function CheckPage() {
     body = mineN
       ? <>
           <p className="hint">What {L.civName(u.me)} are documented doing {phrase}: your own options.</p>
-          {mg.length > 0 && <><h3 className="label">Game plans</h3>{mg.map((x) => <CheckCard key={x.id} itemKind="plan" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</>}
-          {mp.length > 0 && <><h3 className="label">Plays</h3>{mp.map((x) => <CheckCard key={x.id} itemKind="play" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</>}
-          {me.length > 0 && <><h3 className="label">Elements</h3>{me.map((x) => <CheckCard key={x.id} itemKind="el" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</>}
+          {mg.length > 0 && <div className={s.group}><h3 className={'label ' + s.groupLabel}>Game plans</h3><AutoGrid min={340}>{mg.map((x) => <CheckCard key={x.id} itemKind="plan" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</AutoGrid></div>}
+          {mp.length > 0 && <div className={s.group}><h3 className={'label ' + s.groupLabel}>Plays</h3><AutoGrid min={340}>{mp.map((x) => <CheckCard key={x.id} itemKind="play" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</AutoGrid></div>}
+          {me.length > 0 && <div className={s.group}><h3 className={'label ' + s.groupLabel}>Elements</h3><AutoGrid min={340}>{me.map((x) => <CheckCard key={x.id} itemKind="el" id={x.id} civ={u.me} ev={x.ev} vp={vp} />)}</AutoGrid></div>}
         </>
       : <EmptyCheck civ={u.me} phrase={phrase} />;
   } else {
@@ -68,7 +70,7 @@ export function CheckPage() {
         {items.length
           ? <>
               <p className="hint">Your opponent's {word}: everything for {L.civName(u.opp)} that applies {phrase}, with the reason it's here. Tap one to see all of it.</p>
-              {items.map((x) => <CheckCard key={x.id} itemKind={k} id={x.id} civ={u.opp} ev={x.ev} vp={vp} />)}
+              <AutoGrid min={340}>{items.map((x) => <CheckCard key={x.id} itemKind={k} id={x.id} civ={u.opp} ev={x.ev} vp={vp} />)}</AutoGrid>
             </>
           : <EmptyCheck civ={u.opp} phrase={phrase} />}
         {elsewhere.length > 0 && (
@@ -95,9 +97,9 @@ export function CheckPage() {
   const setCheck = () => { savePrefs(); emit(); };
   return (
     <>
-      <PageHead title="Check" aside={<UpkeepLink />} />
+      <PageHead title="Check" />
       <main className="main">
-        <section className="block">
+        <section className={s.controls}>
           <div className="versus">
             <div className="field"><label className="label" htmlFor="ck-me">You</label><CivSelect id="ck-me" value={u.me} onChange={(v) => { u.me = v; setCheck(); }} /></div>
             <button type="button" className="swap" data-act="ck-swap" aria-label="Swap sides" onClick={() => { [u.me, u.opp] = [u.opp, u.me]; setCheck(); }}><Icon name="swap" size={18} w={2} /></button>
@@ -116,7 +118,7 @@ export function CheckPage() {
         </section>
         <section className="block">
           {body}
-          <Link className="btn btn-outline" to={paths.civ(pageCiv, S.ui.civ.tab)}>{L.civShort(pageCiv)} page</Link>
+          <div className={s.foot}><Link className="btn btn-outline" to={paths.civ(pageCiv, S.ui.civ.tab)}>{L.civShort(pageCiv)} page</Link></div>
         </section>
       </main>
     </>

@@ -10,7 +10,7 @@ import { L, useStore } from '../../store';
 import { openDef } from '../../actions';
 import { hasLastPairing, lastPairing, openAnswer, openBranch, pairingFrom, rememberPairing, showPairing, swapSides } from '../../versus';
 import { paths, type VersusPicks } from '../../app/paths';
-import { CivSelect, PageHead, UpkeepLink } from '../../components/bits';
+import { CivSelect, PageHead } from '../../components/bits';
 import { Icon } from '../../components/Icon';
 import { StepPills } from '../../components/Pill';
 import { PlayCard } from '../../kit/play-card/PlayCard';
@@ -199,7 +199,7 @@ export function VersusPage() {
   const ans = their && mine ? L.answerFor(their.id, mine.id, v.me || null, v.them || null) : null;
   return (
     <>
-      <PageHead title="Versus" aside={<UpkeepLink />} />
+      <PageHead title="Versus" />
       <main className="main vs-main">
         <p className="hint">Pick a game plan for each side. Branches leave a spine when something is scouted, and flow back into it where they rejoin.</p>
         <div className="vs-pick">

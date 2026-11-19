@@ -4,7 +4,7 @@ import {
   STAGE_AGES, branchRoute, isActive, parsePlace, planRoute, routeIs, routeMatches,
   type Age, type Branch, type Picks, type Place, type Route, type StagePlan
 } from '@matchup-library/core';
-import { L, S } from '../../../store';
+import { L } from '../../../store';
 import type { CivView } from '../../../app/paths';
 
 // The map being viewed, or any map if it's gone.
@@ -25,13 +25,6 @@ export function picksFrom(view: CivView): Picks {
   return out;
 }
 export const pickedAges = (picks: Picks): Age[] => STAGE_AGES.filter((a) => !!picks[a]);
-
-// The civ you play, for your answers: the one chosen on this page, else the
-// one Check uses. Nobody when you chose nobody, or when it's this civ.
-export function myCivFor(cid: string): string {
-  const me = S.ui.civ.me === null ? S.ui.check.me : S.ui.civ.me;
-  return me && me !== cid && L.civ(me) ? me : '';
-}
 
 // A game plan in the rail, against the picks.
 export interface PlanRow {

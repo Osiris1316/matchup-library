@@ -6,7 +6,7 @@ import {
 import { L, S, emit, useStore, type LibrarySeg } from '../../store';
 import { DEF_WORD, openDef, openElement, setSubjectIntent } from '../../actions';
 import { CivFlags, Flag } from '../../components/Flag';
-import { DefRow, NewButton, PageHead, RetiredToggle, Seg, UpkeepLink } from '../../components/bits';
+import { DefRow, NewButton, PageHead, RetiredToggle, Seg } from '../../components/bits';
 import { Icon } from '../../components/Icon';
 import { PillFace, PlanStages, SplitPill, StepPills } from '../../components/Pill';
 import { ElementPane, UsesPane } from './ElementEditor';
@@ -181,7 +181,7 @@ export function LibraryPage() {
   const u = S.ui.library;
   return (
     <>
-      <PageHead title="Library" aside={<UpkeepLink />} />
+      <PageHead title="Library" />
       <main className="main">
         <div className="lib-top">
           <Seg label="Show" act="lib-seg" options={[['elements', 'Elements'], ['plays', 'Plays'], ['gamePlans', 'Game plans'], ['landmarks', 'Landmarks']] as [LibrarySeg, string][]} current={u.seg}

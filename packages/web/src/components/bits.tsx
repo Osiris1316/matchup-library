@@ -1,17 +1,13 @@
 // Small shared pieces: segmented control, list rows, selects (the page head is in app/).
 import type { ReactNode } from 'react';
 import { isActive, plural, type DefType } from '@matchup-library/core';
-import { L, S, backSheet, closeSheet, openSheet, emit } from '../store';
+import { L, S, backSheet, closeSheet, emit } from '../store';
 import { openDef, toggleDefActive } from '../actions';
 import { Icon } from './Icon';
 import { Flag, hasFlag } from './Flag';
 
 // The page head lives with the app shell now; pages still import it from here.
 export { PageHead } from '../app/PageHead';
-
-export const UpkeepLink = () => (
-  <button type="button" className="head-link" data-act="upkeep" onClick={() => openSheet({ kind: 'upkeep' })}>Upkeep</button>
-);
 
 export function Seg<V extends string>({ label, act, options, current, onPick }: { label?: string; act: string; options: [V, string][]; current: string; onPick: (v: V) => void }) {
   return (

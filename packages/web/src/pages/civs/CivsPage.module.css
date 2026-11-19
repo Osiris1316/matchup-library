@@ -1,0 +1,19 @@
+/* All civs: a card per base civ, with its variants inside. */
+.card { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--line-soft); border-radius: var(--radius-md); overflow: hidden; }
+.card[data-retired] { opacity: 0.72; }
+.civ {
+  display: flex; align-items: center; gap: var(--space-5); min-height: 56px; padding: var(--space-5) var(--space-6);
+  color: var(--fg); text-decoration: none; background: transparent; border: 0; text-align: left; width: 100%;
+}
+a.civ:hover, button.civ:hover { background: var(--raised); }
+.civ + .civ, .variants { border-top: 1px solid var(--line-soft); }
+.flag { flex: 0 0 auto; display: inline-flex; width: 32px; justify-content: center; }
+.text { display: flex; flex-direction: column; gap: 1px; min-width: 0; flex: 1; }
+.name { font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.sum { font-size: var(--text-sm); color: var(--muted); }
+.variants { display: flex; flex-direction: column; padding: var(--space-2) 0; }
+.variant { min-height: 44px; padding-top: var(--space-3); padding-bottom: var(--space-3); }
+.variant .name { font-size: var(--text-md); }
+.restore { margin-right: var(--space-6); flex: 0 0 auto; }
+.row { display: flex; align-items: center; }
+.empty { grid-column: 1 / -1; }

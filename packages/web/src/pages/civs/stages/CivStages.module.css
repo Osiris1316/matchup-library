@@ -70,15 +70,7 @@
 .pathPlay { font-size: var(--text-sm); font-weight: var(--weight-bold); min-width: 0; }
 .pathMatch { font-size: var(--text-sm); color: var(--fg); }
 .pathText { font-size: var(--text-sm); color: var(--fg-2); }
-.gap { color: var(--faint); }
 .acts { display: flex; flex-wrap: wrap; gap: var(--space-3); }
-.answers { display: flex; flex-direction: column; gap: var(--space-2); }
-.answerBtn {
-  display: flex; flex-direction: column; gap: 1px; width: 100%; margin: 0; padding: var(--space-3) var(--space-4);
-  background: var(--raised); border: 1px solid var(--line); border-radius: var(--radius-sm); color: var(--fg); text-align: left;
-  font-size: var(--text-sm); font-weight: var(--weight-bold);
-}
-.answerBtn:hover { background: var(--hover); }
 
 .planSelect { display: none; }
 .planList { display: flex; flex-direction: column; }
@@ -91,8 +83,6 @@
 .branchRow { min-height: 40px; padding-left: var(--space-12); }
 .planName { font-size: 12.5px; font-weight: var(--weight-bold); line-height: 1.35; }
 .planSub { font-size: 11.5px; font-weight: var(--weight-regular); color: var(--muted); }
-.planAnswer { font-size: 11.5px; color: var(--fg-2); }
-.planAnswer.gap { color: var(--faint); }
 .partsHead { padding: var(--space-6) var(--space-4) var(--space-2); }
 .more {
   display: block; width: 100%; min-height: 40px; margin: 0; padding: var(--space-4); border: 0; background: transparent;

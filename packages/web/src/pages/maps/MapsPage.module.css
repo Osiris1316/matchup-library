@@ -1,0 +1,17 @@
+/* Maps: maps, features and map types. Wide: three columns side by side.
+   Phone: one at a time, picked with the switcher. */
+.cols { display: flex; flex-direction: column; gap: var(--space-12); }
+.col { display: flex; flex-direction: column; gap: var(--space-4); min-width: 0; }
+.colHead { display: flex; align-items: baseline; justify-content: space-between; gap: var(--space-4); padding-bottom: var(--space-3); border-bottom: 1px solid var(--line); }
+.colTitle { margin: 0; font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.group { padding: var(--space-6) 0 var(--space-1); }
+.seg { display: block; }
+
+@media (max-width: 1099px) {
+  .col:not([data-current]) { display: none; }
+  .colHead { display: none; }
+}
+@media (min-width: 1100px) {
+  .seg { display: none; }
+  .cols { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr) minmax(0, 1fr); gap: var(--space-16); align-items: start; }
+}

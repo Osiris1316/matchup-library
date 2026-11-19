@@ -1,0 +1,13 @@
+/* A civ's tags. Wide: three columns, then two. */
+.cols { display: flex; flex-direction: column; gap: var(--space-10); }
+.tagBtn { flex: 0 0 auto; }
+.toCheck { align-self: flex-start; }
+@media (min-width: 1100px) {
+  .cols { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-16); align-items: start; }
+  .cols.two { grid-template-columns: repeat(2, minmax(0, 1fr)); padding-top: var(--space-6); border-top: 1px solid var(--line-soft); }
+  .tagBtn { margin-left: auto; }
+  /* A pointer doesn't need the phone's tall tap target, and this keeps the
+     toggle level with the heading beside it. Paired with the legacy class so
+     it outranks that rule, which loads later. */
+  .toggle:global(.textlink) { min-height: 0; align-items: baseline; }
+}

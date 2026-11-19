@@ -1,32 +1,19 @@
-// The rail beside a civ's stages: the civ you play, the path you've picked and
-// what it matches, and the game plans, shrinking to the ones that go your way.
+// The rail beside a civ's stages: the path you've picked and what it matches,
+// the map, and the game plans, shrinking to the ones that go your way.
 // On a phone it sits above the columns and the game plans become a dropdown.
 import {
-  PLAN_STATUS_NAME, STAGE_NAME, plural, routeMatches, type Age, type Answer, type Picks, type Place, type Route
+  STAGE_NAME, plural, routeMatches, type Age, type Picks, type Place, type Route
 } from '@matchup-library/core';
-import { L, S, emit, openSheet, savePrefs } from '../../../store';
+import { L, S, emit, openSheet } from '../../../store';
 import { openDef, openNewPlan, openTagSheet } from '../../../actions';
-import { openBranch, openVersus } from '../../../versus';
-import { CivSelect, MapGroups } from '../../../components/bits';
+import { openVersus } from '../../../versus';
+import { MapGroups } from '../../../components/bits';
 import { cx } from '../../../kit/cx';
 import { gamesThrough, pickedAges, type PlanRow } from './view';
 import s from './CivStages.module.css';
 
-const status = (x: { status: keyof typeof PLAN_STATUS_NAME | null }) => (x.status ? PLAN_STATUS_NAME[x.status] : 'No status yet');
-const answerText = (hits: [string, Answer][]) => hits.map(([, a]) => L.planTitle(a.myPlan) + ' (' + PLAN_STATUS_NAME[a.status] + ')').join(', ');
 
-interface Props { cid: string; vp: Place; placeKey: string; picks: Picks; rows: PlanRow[]; routes: Route[]; me: string; setPicks: (p: Picks) => void; onMap: (key: string) => void }
-
-function YouPlay({ cid }: { cid: string }) {
-  const u = S.ui.civ;
-  const value = u.me === null ? S.ui.check.me : u.me;
-  return (
-    <div className={s.section}>
-      <label className="label" htmlFor="stg-me">You play</label>
-      <CivSelect id="stg-me" value={value === cid ? '' : value} empty="Nobody (hide your answers)" onChange={(v) => { u.me = v; savePrefs(); }} />
-    </div>
-  );
-}
+interface Props { cid: string; vp: Place; placeKey: string; picks: Picks; rows: PlanRow[]; routes: Route[]; setPicks: (p: Picks) => void; onMap: (key: string) => void }
 
 // Why, Tag and Edit for a play or a game plan, with what documents it here.
 function ItemActions({ cid, field, id, vp, placeKey }: { cid: string; field: 'play' | 'plan'; id: string; vp: Place; placeKey: string }) {
@@ -43,7 +30,7 @@ function ItemActions({ cid, field, id, vp, placeKey }: { cid: string; field: 'pl
   );
 }
 
-function YourPath({ cid, vp, placeKey, picks, rows, routes, me, setPicks }: Props) {
+function YourPath({ cid, vp, placeKey, picks, rows, routes, setPicks }: Props) {
   const ages = pickedAges(picks);
   if (!ages.length) return null;
   const exact = rows.find((r) => r.exact);
@@ -51,8 +38,6 @@ function YourPath({ cid, vp, placeKey, picks, rows, routes, me, setPicks }: Prop
   const games = gamesThrough(routes, picks);
   const one = ages.length === 1 ? ages[0] as Age : null;
   const onePlay = one ? (picks[one] as string) : null;
-  const yourBranches = me && one && onePlay ? L.answersToPlay(me, cid, onePlay, one, vp) : [];
-  const planAnswers = me && exact ? L.answersToPlan(exact.plan.id, me, cid) : [];
   const exactBranch = exact && exact.exact && exact.exact.kind === 'branch' ? exact.branches.find((b) => b.branch.id === exact.exact?.branch) : null;
   return (
     <div className={s.path} aria-live="polite">
@@ -67,28 +52,13 @@ function YourPath({ cid, vp, placeKey, picks, rows, routes, me, setPicks }: Prop
         ? <>
             <span className={s.pathMatch}>This is <strong>{L.planTitle(exact.plan.id)}</strong>{exactBranch ? ', ' + exactBranch.branch.name : ''}.</span>
             <ItemActions cid={cid} field="plan" id={exact.plan.id} vp={vp} placeKey={placeKey} />
-            {me && (
-              <span className={cx(s.pathText, !planAnswers.length && s.gap)}>
-                {planAnswers.length ? 'Your answer as ' + L.civShort(me) + ': ' + answerText(planAnswers) + '.' : 'No answer yet as ' + L.civShort(me) + '.'}
-              </span>
-            )}
             <span className={s.acts}>
-              <button type="button" className="btn btn-sm" data-act="stg-versus" onClick={() => openVersus({ them: cid, their: exact.plan.id, me: me || undefined })}>Answer it in Versus</button>
+              <button type="button" className="btn btn-sm" data-act="stg-versus" onClick={() => openVersus({ me: cid, mine: exact.plan.id })}>Open in Versus</button>
             </span>
           </>
         : one && onePlay
           ? <>
               <ItemActions cid={cid} field="play" id={onePlay} vp={vp} placeKey={placeKey} />
-              {me && (yourBranches.length
-                ? <span className={s.answers}>
-                    <span className="sublabel">Your answers as {L.civShort(me)}</span>
-                    {yourBranches.map((x) => (
-                      <button key={x.plan + ':' + x.branch.id} type="button" className={s.answerBtn} data-act="stg-branch" onClick={() => openBranch(x.plan, x.branch.id, 'mine')}>
-                        {x.branch.name}<span className={s.planSub}>{L.planTitle(x.plan)} · {status(x.branch)}</span>
-                      </button>
-                    ))}
-                  </span>
-                : <span className={cx(s.pathText, s.gap)}>No answer yet as {L.civShort(me)}.</span>)}
             </>
           : <span className={s.pathText}>
               {matching.length ? plural(matching.length, 'game plan') + ' go this way.' : 'No game plan goes this way yet.'}
@@ -103,17 +73,15 @@ function YourPath({ cid, vp, placeKey, picks, rows, routes, me, setPicks }: Prop
   );
 }
 
-function PlanButton({ cid, row, me, picks, setPicks }: { cid: string; row: PlanRow; me: string; picks: Picks; setPicks: (p: Picks) => void }) {
+function PlanButton({ row, picks, setPicks }: { row: PlanRow; picks: Picks; setPicks: (p: Picks) => void }) {
   const best = row.plan.ev[0];
   const on = !!row.exact;
   const viaBranch = row.route.kind === 'branch' ? row.branches.find((b) => b.branch.id === row.route.branch) : null;
-  const answers = me ? L.answersToPlan(row.plan.id, me, cid) : [];
   return (
     <>
       <button type="button" className={s.plan} data-act="stg-plan" data-id={row.plan.id} aria-pressed={on} onClick={() => setPicks(on ? {} : row.route.stages)}>
         <span className={s.planName}>{L.planTitle(row.plan.id)}</span>
         <span className={s.planSub}>{viaBranch ? 'Through ' + viaBranch.branch.name + '. ' : ''}{best ? L.evText(best, 'plan') : ''}</span>
-        {me && <span className={cx(s.planAnswer, !answers.length && s.gap)}>{answers.length ? 'Your answer: ' + answerText(answers) : 'No answer yet'}</span>}
       </button>
       {on && row.branches.map((b) => {
         const here = routeMatches(b.route, picks) && pickedAges(picks).length === Object.keys(b.route.stages).length;
@@ -148,7 +116,7 @@ function MapPick({ placeKey, onMap }: { placeKey: string; onMap: (key: string) =
 }
 
 export function StagesRail(props: Props) {
-  const { cid, vp, placeKey, picks, rows, me, setPicks, onMap } = props;
+  const { cid, vp, placeKey, picks, rows, setPicks, onMap } = props;
   const u = S.ui.civ;
   const filtering = pickedAges(picks).length > 0;
   const shown = rows.filter((r) => !filtering || r.matches);
@@ -159,7 +127,6 @@ export function StagesRail(props: Props) {
   const exact = rows.find((r) => r.exact);
   return (
     <aside className={s.rail} aria-label="Game plans and your path">
-      <YouPlay cid={cid} />
       <YourPath {...props} />
       <MapPick placeKey={placeKey} onMap={onMap} />
       <div className={s.section}>
@@ -178,7 +145,7 @@ export function StagesRail(props: Props) {
             : rows.map((r) => <PlanOption key={r.plan.id} row={r} />)}
         </select>
         <div className={s.planList}>
-          {documented.map((r) => <PlanButton key={r.plan.id} cid={cid} row={r} me={me} picks={picks} setPicks={setPicks} />)}
+          {documented.map((r) => <PlanButton key={r.plan.id} row={r} picks={picks} setPicks={setPicks} />)}
           {!documented.length && (
             <p className="hint">{filtering ? 'No documented game plan goes this way.' : 'No game plans documented for ' + L.civShort(cid) + (vp.kind === 'any' ? ' yet' : ' ' + L.placePhrase(vp)) + '. Tag one, or log a game where they ran it.'}</p>
           )}
@@ -188,7 +155,7 @@ export function StagesRail(props: Props) {
             </button>
           )}
           {parts.length > 0 && filtering && <span className={cx('label', s.partsHead)}>Possible from their plays</span>}
-          {partsShown.map((r) => <PlanButton key={r.plan.id} cid={cid} row={r} me={me} picks={picks} setPicks={setPicks} />)}
+          {partsShown.map((r) => <PlanButton key={r.plan.id} row={r} picks={picks} setPicks={setPicks} />)}
         </div>
       </div>
     </aside>

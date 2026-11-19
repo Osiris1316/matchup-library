@@ -1,5 +1,6 @@
 // The open sheet, if any, over a scrim, and the toast. Sheets aren't pages:
-// they edit something in place and close back to the page underneath.
+// they edit something in place and close back to the page underneath. The
+// global class "sheet" stays on the panel for the rules that style its insides.
 import { S, closeSheet, showToast, type Sheet } from '../store';
 import { undoLast } from '../api/client';
 import { DefSheet } from '../sheets/DefSheet';
@@ -8,6 +9,7 @@ import { WhySheet } from '../sheets/WhySheet';
 import { MergeSheet, UpkeepSheet } from '../sheets/UpkeepSheet';
 import { MomentSheet, RefDetailsSheet } from '../sheets/RefSheets';
 import { AnswerSheet, BranchSheet } from '../sheets/VersusSheets';
+import s from './SheetHost.module.css';
 
 function SheetInner({ sh }: { sh: Sheet }) {
   switch (sh.kind) {
@@ -30,9 +32,9 @@ export function SheetHost() {
   if (!sh) return null;
   return (
     <>
-      <button type="button" className="scrim" data-act="sheet-close" aria-label="Close" onClick={closeSheet} />
-      <div key={sh.sid} className="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-        <span className="grab" aria-hidden="true" />
+      <button type="button" className={s.scrim} data-act="sheet-close" aria-label="Close" onClick={closeSheet} />
+      <div key={sh.sid} className={'sheet ' + s.sheet} role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+        <span className={s.grab} aria-hidden="true" />
         <SheetInner sh={sh} />
       </div>
     </>

@@ -33,14 +33,14 @@ export function createAppRouter() {
       children: [
         { index: true, element: <Start /> },
         { path: 'library', element: <LibraryPage />, handle: wide },
-        { path: 'civs', element: <CivsPage /> },
+        { path: 'civs', element: <CivsPage />, handle: wide },
         { path: 'civs/:civ', element: <CivPage tab="stages" />, handle: wide },
         { path: 'civs/:civ/tags', element: <CivPage tab="tags" />, handle: wide },
-        { path: 'maps', element: <MapsPage /> },
-        { path: 'refs', element: <RefsPage /> },
-        { path: 'refs/:kind/:id', element: <RefPage /> },
+        { path: 'maps', element: <MapsPage />, handle: wide },
+        { path: 'refs', element: <RefsPage />, handle: wide },
+        { path: 'refs/:kind/:id', element: <RefPage />, handle: wide },
         { path: 'versus', element: <VersusPage />, handle: wide },
-        { path: 'check', element: <CheckPage /> },
+        { path: 'check', element: <CheckPage />, handle: wide },
         { path: '*', element: <NotFound /> }
       ]
     }

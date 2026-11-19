@@ -119,12 +119,12 @@ function BranchesField({ planId, sh }: { planId: string; sh: DefSheetT }) {
   return (
     <div className="field">
       <span className="label">Branches</span>
-      {list.map((b) => (
+      {list.length > 0 && <div className="uses">{list.map((b) => (
         <button key={b.id} type="button" className="item" data-act="df-branch" data-id={b.id} onClick={() => openBranch(planId, b.id, b.trigger ? 'mine' : 'theirs', sh)}>
           <span className="t">{b.name}</span>
           <span className="s">{b.trigger ? 'If you scout ' + L.triggerText(b.trigger) : 'Variant'}. {b.rejoins ? 'Rejoins in ' + STAGE_NAME[b.rejoins] : 'Doesn\'t rejoin'}.</span>
         </button>
-      ))}
+      ))}</div>}
       {!list.length && <span className="hint">None yet. A branch leaves this game plan when you scout something; a variant is another way it goes.</span>}
       <div className="chiprow">
         <button type="button" className="btn btn-outline btn-sm" data-act="df-branch-new" onClick={() => openBranch(planId, null, 'mine', sh)}>Add a branch</button>

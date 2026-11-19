@@ -23,7 +23,7 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/web/src/pages/` | One folder per page: the Library, civs and a civ's page, maps, references, Versus and Check. |
 | `packages/web/src/kit/` | Reusable pieces that only draw what they're given, each with its own styles: pills, the play card, lines between cards. |
 | `packages/web/src/styles/` | `tokens.css` (colors, space, type, corners), `base.css`, and `legacy.css` for page styles still to move into modules. |
-| `packages/web/src/pages/civs/stages/` | A civ's stages: its plays per age, the rail, narrowing by picks, and your answers. |
+| `packages/web/src/pages/civs/stages/` | A civ's stages: its plays per age, the rail, and narrowing by picks. |
 | `packages/core/src/routes.ts` | Routes: the ways a civ's game has been written down age by age (game plans, branches, games), and how picks narrow by them. |
 | `packages/web/src/pages/versus/VersusPage.tsx` | Versus: your game plan against theirs, with branches, triggers and the answer. |
 | `packages/web/public/flags/` | Civ flags, from the league manager. |
@@ -78,19 +78,25 @@ The aoe4world data lists, for some units and buildings, the civs that get them e
 
 Every page's head starts with the menu button, which opens a drawer with the pages: the Library, Civs, Maps, References, Versus and Check, then All civs (the list, for adding, retiring and variants) and Upkeep. Civs opens the civ you looked at last, on the tab you used last. On a civ's page, the civ's name in the head is a dropdown: pick another civ to open it on the same tab and map. Escape, a click outside, or a choice closes the menu.
 
+## The other pages
+
+Every page uses the width of a wide screen. **All civs** is a grid of cards, one per civ with its variants inside it, and New civ in the head. **Maps** shows maps (grouped by type), features and map types as three columns side by side, each with its own New button; on a phone a switcher shows one at a time. **References** keeps the list on the left and the open reference on the right, with the open one marked in the list, and each side scrolls on its own; on a phone you see one at a time. **Check** puts the two civs, the map and what to show in one row, with the cards in a grid. A civ's **Tags** has game plans, plays and elements side by side, then what's been seen in references and the retired tags.
+
+On a wide screen the editing sheets open as a full-height panel on the right, so the page stays in view beside them; on a phone they rise from the bottom as before. Upkeep is in the menu only.
+
 ## A civ's stages
 
-A civ's page opens on **Stages**, built for a wide screen. The head holds the civ picker, Stages or Tags, Show or hide plays not seen, Expand all and Collapse all, How to read, and Edit civ; the age headings come right under it. Then a rail on the left, then the civ's plays in columns for Dark, Feudal and early Castle, grouped by family. A card's outline shows the evidence: solid for tagged, seen in a game or guide, or standard (every step is something every civ does); dashed for from parts (each step documented, never seen together); faint dashed for not seen (possible, nothing documented). Plays the civ can't do in that age are left out, and each column says which elements aren't open to the civ there. **How to read** in the bar opens the key.
+A civ's page opens on **Stages**, built for a wide screen. The head holds the civ picker, Stages or Tags, Show or hide plays not seen, Expand all and Collapse all, How to read, and Edit civ; the age headings come right under it. Then a rail on the left, then the civ's plays in columns for Dark, Feudal and early Castle, grouped by family. A card's outline shows the evidence: solid for tagged, seen in a game or guide, or standard (every step is something every civ does); dashed for from parts (each step documented, never seen together); faint dashed for not seen (possible, nothing documented). Plays the civ can't do in that age are left out. **How to read** in the bar opens the key.
 
 **Narrowing.** Pick a card in any age and the rest of that age fades. In the other ages, plays that a game plan, one of its branches, or a logged game has together with your picks stay lit; the rest fade but stay clickable. It works both ways: pick a Feudal play first and Dark shows what leads there. Pick a card again to clear it. The picks, and the map filter (in the rail, above the game plans), are in the address, so a narrowed view can be bookmarked.
 
 **Focus.** While you narrow, each column puts the family holding your pick at the top with the pick first, then the families with cards that go with your path (those cards first), then the rest; so picks line up across the page and the path runs straight. Families with nothing but faded cards fold to one line that says what's inside. Each family heading folds or opens it, and the bar has Expand all and Collapse all; what you fold by hand stays folded on every civ. Cards slide to their new places rather than jumping (not when the system asks for less motion). The age headings and the rail stay in view while you scroll. Folding faded families while narrowing is a stored preference, on by default (`foldFaded`), ready for a preferences page.
 
-**The rail** holds the civ you play, your path and the game plans. The game plans shrink to the ones that go your way; picking one fills in all three ages, and its branches show under it. When your path is a game plan, the rail says which, with Why, Tag, Edit and Answer it in Versus. When no game plan goes that way, it offers to save the path as a new one, tagged to the civ.
+**The rail** holds your path, the map and the game plans. The game plans shrink to the ones that go your way; picking one fills in all three ages, and its branches show under it. When your path is a game plan, the rail says which, with Why, Tag, Edit and Open in Versus, which puts this civ and game plan on your side. When no game plan goes that way, it offers to save the path as a new one, tagged to the civ.
 
-**Your answers.** With the civ you play chosen, each of their cards shows your branch that answers it (a branch on one of your game plans whose trigger is that play, or one of its elements in that age) and its status, or "No answer yet". Game plans in the rail show your answer to them. Choose nobody to hide this.
+**Your options, not a matchup.** The page reads as what you can do with this civ. Answers, and anything about the civ across from you, belong to Versus; the core keeps the rules for finding your answer to a play or game plan (`answersToPlay`, `answersToPlan`) for when Versus uses them.
 
-**Tags** has the tag lists as before. On a phone the head's tools take a second row that scrolls sideways, the rail sits above the ages, the game plans become a dropdown, and no lines are drawn.
+On a phone the head's tools take a second row that scrolls sideways, the rail sits above the ages, the game plans become a dropdown, and no lines are drawn.
 
 ## Deploy
 
