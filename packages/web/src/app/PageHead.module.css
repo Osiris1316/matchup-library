@@ -1,0 +1,36 @@
+/* The page head: the menu button, the page's title (or a control in its place,
+   such as the civ picker), the page's tools, and an aside at the end. It sticks
+   to the top; its height is measured into --page-head-height for whatever
+   sticks under it. On a phone the tools wrap onto a second row. */
+
+.head {
+  position: sticky; top: env(safe-area-inset-top, 0px); z-index: var(--z-head);
+  background: var(--bg); border-bottom: 1px solid var(--line-soft);
+  padding-block: var(--space-4) var(--space-3);
+  padding-left: max(var(--space-8), env(safe-area-inset-left, 0px)); padding-right: max(var(--space-8), env(safe-area-inset-right, 0px));
+}
+:global(.shell.wide) .head { padding-left: var(--space-12); padding-right: var(--space-12); }
+/* The title side, the tools, then the aside at the end. */
+.row {
+  display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr) auto; grid-template-areas: "lead tools aside";
+  align-items: center; column-gap: var(--space-10); row-gap: var(--space-3); min-height: 44px;
+}
+.lead { grid-area: lead; display: flex; align-items: center; gap: var(--space-5); min-width: 0; }
+.title { margin: 0; font-size: var(--text-2xl); font-weight: var(--weight-bold); letter-spacing: -0.015em; text-wrap: balance; min-width: 0; }
+.hidden { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.back { width: 32px; height: 44px; margin-left: calc(-1 * var(--space-4)); display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
+.mark {
+  min-width: 28px; height: 20px; padding: 0 var(--space-2); display: inline-flex; align-items: center; justify-content: center; flex: 0 0 auto;
+  background: var(--raised); border: 1px solid var(--line); border-radius: 4px; font-size: var(--text-2xs); font-weight: var(--weight-bold); color: var(--muted);
+}
+.tools { grid-area: tools; display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-8); min-width: 0; }
+.aside { grid-area: aside; justify-self: end; display: flex; align-items: center; gap: var(--space-4); }
+
+@media (max-width: 1099px) {
+  /* The title and the aside share the first row; the tools take one row under
+     them, scrolling sideways if they don't fit, so the head stays two rows at most. */
+  .row { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "lead aside" "tools tools"; }
+  .tools { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: var(--space-1); }
+  .tools::-webkit-scrollbar { display: none; }
+  .tools > * { flex-shrink: 0; }
+}

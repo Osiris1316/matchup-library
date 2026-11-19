@@ -6,7 +6,7 @@ The page is moving, one page at a time, from one big stylesheet and screens that
 
 ```
 src/
-  app/        the shell: routes, addresses, layout, tab bar, sheet host
+  app/        the shell: routes, addresses, layout, page head, menu, sheet host
   pages/      one folder per page; a page reads the store and the address
   kit/        reusable pieces that only draw what they're given
   components/ app-aware widgets still reading the store (moving to kit/ or pages/ over time)
@@ -32,6 +32,8 @@ The rules (`@matchup-library/core`) stay outside the page: the page asks `L` (th
 **Pages subscribe to the store.** Each page calls `useStore()` so it redraws when the library changes. State that only one page uses lives in the address or in that page.
 
 **legacy.css only shrinks.** When a page is rebuilt, its rules move into modules beside it and leave `legacy.css`.
+
+**The page head is the shell's.** Every page uses `app/PageHead.tsx`: the menu button, then the title (or a control standing in for it, as the civ picker does, with the title kept for screen readers), the page's tools, and an aside. It measures its own height into `--page-head-height`, so anything that sticks under it lines up on any page and at any width.
 
 ## The kit so far
 

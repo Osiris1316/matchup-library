@@ -9,6 +9,7 @@ const PATHS = {
   x: <><line x1="6" y1="6" x2="18" y2="18" /><line x1="18" y1="6" x2="6" y2="18" /></>,
   plus: <><line x1="12" y1="5" x2="12" y2="19" /><line x1="5" y1="12" x2="19" y2="12" /></>,
   back: <polyline points="15 18 9 12 15 6" />,
+  menu: <><line x1="4" y1="7" x2="20" y2="7" /><line x1="4" y1="12" x2="20" y2="12" /><line x1="4" y1="17" x2="20" y2="17" /></>,
   refs: <><rect x="3" y="5" width="18" height="14" rx="2" /><polygon points="10 9 15 12 10 15 10 9" /></>,
   down: <polyline points="6 9 12 15 18 9" />,
   versus: <><line x1="3" y1="6" x2="21" y2="6" /><line x1="3" y1="18" x2="21" y2="18" /><path d="M7 18v-3a3 3 0 0 1 3-3h4a3 3 0 0 0 3-3V6" /></>

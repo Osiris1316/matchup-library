@@ -7,7 +7,7 @@ import {
 import { L, S, emit, openSheet, savePrefs } from '../../../store';
 import { openDef, openNewPlan, openTagSheet } from '../../../actions';
 import { openBranch, openVersus } from '../../../versus';
-import { CivSelect } from '../../../components/bits';
+import { CivSelect, MapGroups } from '../../../components/bits';
 import { cx } from '../../../kit/cx';
 import { gamesThrough, pickedAges, type PlanRow } from './view';
 import s from './CivStages.module.css';
@@ -15,7 +15,7 @@ import s from './CivStages.module.css';
 const status = (x: { status: keyof typeof PLAN_STATUS_NAME | null }) => (x.status ? PLAN_STATUS_NAME[x.status] : 'No status yet');
 const answerText = (hits: [string, Answer][]) => hits.map(([, a]) => L.planTitle(a.myPlan) + ' (' + PLAN_STATUS_NAME[a.status] + ')').join(', ');
 
-interface Props { cid: string; vp: Place; placeKey: string; picks: Picks; rows: PlanRow[]; routes: Route[]; me: string; setPicks: (p: Picks) => void }
+interface Props { cid: string; vp: Place; placeKey: string; picks: Picks; rows: PlanRow[]; routes: Route[]; me: string; setPicks: (p: Picks) => void; onMap: (key: string) => void }
 
 function YouPlay({ cid }: { cid: string }) {
   const u = S.ui.civ;
@@ -133,8 +133,22 @@ const PlanOption = ({ row }: { row: PlanRow }) => (
   <option value={row.plan.id}>{L.planTitle(row.plan.id)}{row.plan.tier === 'parts' ? ' (possible)' : ''}</option>
 );
 
+// The map being viewed: it narrows the evidence, so it sits with the game plans it changes.
+function MapPick({ placeKey, onMap }: { placeKey: string; onMap: (key: string) => void }) {
+  return (
+    <div className={s.section}>
+      <label className="label" htmlFor="stg-place">Map</label>
+      <select id="stg-place" className="select" value={placeKey} onChange={(e) => onMap(e.target.value)}>
+        <option value="any:">Any map</option>
+        <optgroup label="Any map of a type">{L.activeTypes().map((t) => <option key={t.id} value={'type:' + t.id}>Any {t.name.toLowerCase()} map</option>)}</optgroup>
+        <MapGroups prefix="map:" />
+      </select>
+    </div>
+  );
+}
+
 export function StagesRail(props: Props) {
-  const { cid, vp, picks, rows, me, setPicks } = props;
+  const { cid, vp, placeKey, picks, rows, me, setPicks, onMap } = props;
   const u = S.ui.civ;
   const filtering = pickedAges(picks).length > 0;
   const shown = rows.filter((r) => !filtering || r.matches);
@@ -147,6 +161,7 @@ export function StagesRail(props: Props) {
     <aside className={s.rail} aria-label="Game plans and your path">
       <YouPlay cid={cid} />
       <YourPath {...props} />
+      <MapPick placeKey={placeKey} onMap={onMap} />
       <div className={s.section}>
         <div className={s.sectionHead}>
           <h2 className="label">Game plans</h2>

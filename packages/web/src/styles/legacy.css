@@ -6,15 +6,8 @@
    hooks ([data-pill], [data-pill-row]) to keep older rows spaced as before.
    They go when the page that needs them moves to modules. */
 
-.shell { max-width: 560px; margin: 0 auto; min-height: 100vh; padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
-.head { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line-soft);
-  padding-block: 8px 6px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
-.head-row { display: flex; align-items: center; gap: 10px; min-height: 44px; }
-.head h1 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; text-wrap: balance; min-width: 0; }
-.head .aside { margin-left: auto; flex: 0 0 auto; }
+.shell { max-width: 560px; margin: 0 auto; min-height: 100vh; padding-bottom: calc(32px + env(safe-area-inset-bottom, 0px)); }
 .head-link { display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; font-size: 12px; font-weight: 500; color: var(--muted); background: transparent; border: 0; }
-.back { width: 32px; height: 44px; margin-left: -8px; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); flex: 0 0 auto; }
-.mark { min-width: 28px; height: 20px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; background: var(--raised); border: 1px solid var(--line); border-radius: 4px; font-size: 10px; font-weight: 600; color: var(--muted); flex: 0 0 auto; }
 
 .main { display: flex; flex-direction: column; gap: 20px; padding-block: 14px 20px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .block { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
@@ -100,7 +93,7 @@
 .close { width: 44px; height: 44px; margin-right: -12px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--muted); flex: 0 0 auto; }
 .sheet-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 2px; min-height: 36px; margin: 0 0 -10px -6px; padding: 0 6px 0 0; background: transparent; border: 0; color: var(--muted); font-size: 12px; font-weight: 500; }
 
-.toast-wrap { position: fixed; left: 0; right: 0; bottom: calc(66px + env(safe-area-inset-bottom, 0px)); z-index: 30; display: flex; justify-content: center; pointer-events: none;
+.toast-wrap { position: fixed; left: 0; right: 0; bottom: calc(20px + env(safe-area-inset-bottom, 0px)); z-index: 30; display: flex; justify-content: center; pointer-events: none;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
 .toast-wrap.top { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 10px); }
 .toast { pointer-events: auto; width: 100%; max-width: 528px; display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 12px; min-height: 48px; border-radius: var(--r); background: var(--raised); border: 1px solid var(--line); box-shadow: var(--shadow); font-size: 13px; font-weight: 500; color: var(--fg); }
@@ -147,15 +140,12 @@
 
 
 /* ---------------------------------------------------------------------------
-   Wide screens: studying happens on a wide monitor. The tab bar moves to the
-   top and the Library spreads into three panes. Phones keep the old layout.
+   Wide screens: studying happens on a wide monitor. Pages use the full width
+   and the Library spreads into three panes. Phones keep the old layout.
    --------------------------------------------------------------------------- */
 @media (min-width: 1100px) {
-  .shell { padding-top: var(--nav-height-wide); padding-bottom: 32px; }
-  .head { top: var(--nav-height-wide); }
-  .toast-wrap { bottom: 20px; }
   .shell.wide { max-width: 1520px; }
-  .shell.wide .head, .shell.wide .main { padding-left: 24px; padding-right: 24px; }
+  .shell.wide .main { padding-left: 24px; padding-right: 24px; }
 }
 
 /* The Library: elements, the open element, and where it is used. */
@@ -167,7 +157,7 @@
 @media (min-width: 1100px) {
   .lib { display: grid; grid-template-columns: minmax(360px, 420px) minmax(0, 1fr) minmax(300px, 380px); gap: 0; align-items: start; border-top: 1px solid var(--line-soft); }
   /* Each pane scrolls on its own, so the list stays put while you edit. */
-  .lib { height: calc(100vh - 186px); min-height: 520px; }
+  .lib { height: calc(100vh - var(--page-head-height) - 74px); min-height: 520px; }
   .lib > .pane { display: flex !important; height: 100%; overflow-y: auto; overscroll-behavior: contain; padding: 16px 24px 32px; }
   .lib > .pane.list { padding-left: 0; padding-right: 16px; border-right: 1px solid var(--line-soft); }
   .lib > .pane.uses { padding-right: 0; border-left: 1px solid var(--line-soft); }
@@ -257,9 +247,6 @@
 .civage .icon-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; background: transparent; border: 0; color: var(--muted); }
 .tiles.small { gap: 4px; }
 .tiles.small button { min-height: 32px; font-size: 11.5px; }
-.cv-tabs { flex: 0 0 auto; }
-.cv-tabs .seg { display: inline-flex; padding: 2px; }
-.cv-tabs .seg button { min-height: 36px; padding: 0 16px; flex: 0 0 auto; }
 .main.narrow { max-width: 600px; }
 .shell.wide .main.narrow { padding-left: 24px; }
 

@@ -4,7 +4,7 @@ import { useEffect, type ReactNode } from 'react';
 import { Link, Outlet, ScrollRestoration, useLocation, useMatches, useRouteError } from 'react-router';
 import { S, onPageChange, useStore } from '../store';
 import { PageHead } from '../components/bits';
-import { Nav } from './Nav';
+import { MenuDrawer } from './Menu';
 import { SheetHost, Toast } from './SheetHost';
 import { paths } from './paths';
 
@@ -28,7 +28,7 @@ function Shell({ wide, children }: { wide: boolean; children: ReactNode }) {
   return (
     <>
       <div className={'shell' + (wide ? ' wide' : '')}><div id="view">{children}</div></div>
-      <Nav />
+      <MenuDrawer />
       <div id="sheet"><SheetHost /></div>
       <div id="toast"><Toast /></div>
     </>

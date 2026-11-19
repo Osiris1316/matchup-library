@@ -1,17 +1,17 @@
 /* A civ's stages. Wide: the rail, then each age with an age-up gutter between.
-   Phone: the rail, then each age in turn, stacked. */
+   Phone: the rail, then each age in turn, stacked. The page's tools live in its
+   head (CivHead.tsx). */
 
-.stages { display: flex; flex-direction: column; gap: var(--space-8); }
+/* The page under its head: the age headings come right after it. */
+.page:global(.main) { gap: var(--space-6); padding-top: 0; }
 
-/* The bar: tabs, the summary, plays not seen, the map, and the key. */
-.bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-4) var(--space-7); }
-.summary { flex: 1 1 300px; font-size: var(--text-md); color: var(--muted); }
-.mapSelect { width: auto; min-width: 160px; max-width: 220px; min-height: 40px; }
 .toggle, .textBtn {
   padding: 0; margin: 0; border: 0; background: transparent; color: var(--muted);
   font-size: var(--text-sm); font-weight: var(--weight-medium); text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
 }
-.toggle { min-height: 40px; }
+.toggle { min-height: 36px; }
+.keyBtn { flex: 0 0 auto; }
+@media (min-width: 1100px) { .keyBtn { margin-left: auto; } }
 .toggle:hover, .textBtn:hover { color: var(--fg); }
 
 /* The key, opened from the bar. */
@@ -45,15 +45,16 @@
 .family { display: flex; flex-direction: column; gap: var(--space-3); }
 /* A family's heading folds and opens it. */
 .familyHead {
-  display: flex; align-items: center; gap: var(--space-3); width: 100%; min-height: 32px; margin: 0; padding: 0 var(--space-1);
+  display: flex; align-items: center; gap: var(--space-3); width: 100%; height: 32px; min-width: 0; margin: 0; padding: 0 var(--space-1);
   border: 0; background: transparent; color: var(--muted); text-align: left; cursor: pointer; border-radius: var(--radius-sm);
 }
 .familyHead:hover { color: var(--fg); background: var(--raised); }
 .chev { display: inline-flex; flex: 0 0 auto; transform: rotate(-90deg); transition: transform 150ms ease; }
 .chev[data-open] { transform: none; }
-.familyName { flex: 0 1 auto; min-width: 0; color: inherit; }
-.familyCount { margin-left: auto; flex: 0 0 auto; font-size: 11.5px; color: var(--faint); }
-.family[data-folded] { gap: var(--space-2); }
+/* One line, whatever the width: every heading is the same height, so picks under
+   them line up and the path runs straight. */
+.familyName { flex: 0 1 auto; min-width: 0; color: inherit; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.familyCount { margin-left: auto; flex: 0 0 auto; font-size: 11.5px; color: var(--faint); white-space: nowrap; }
 
 .foldAll { display: inline-flex; gap: var(--space-6); }
 
@@ -107,15 +108,15 @@
   /* The rail stays in view while the ages scroll, under the page head. */
   .rail {
     grid-column: 1; grid-row: 1 / span 2; padding-right: var(--space-12);
-    position: sticky; top: calc(var(--nav-height-wide) + var(--page-head-height) + var(--space-6)); max-height: calc(100vh - var(--nav-height-wide) - var(--page-head-height) - var(--space-12)); overflow-y: auto;
+    position: sticky; top: calc(var(--page-head-height) + var(--space-6)); max-height: calc(100vh - var(--page-head-height) - var(--space-12)); overflow-y: auto;
   }
-  .head { grid-row: 1; top: calc(var(--nav-height-wide) + var(--page-head-height)); }
+  .head { grid-row: 1; top: var(--page-head-height); }
   .head[data-age="dark"], .col[data-age="dark"] { grid-column: 2; }
   .head[data-age="feudal"], .col[data-age="feudal"] { grid-column: 4; }
   .head[data-age="castle"], .col[data-age="castle"] { grid-column: 6; }
   .gutHead {
     display: flex; justify-content: center; align-self: stretch; align-items: flex-end; grid-row: 1; padding-bottom: var(--space-4);
-    position: sticky; top: calc(var(--nav-height-wide) + var(--page-head-height)); z-index: 3; background: var(--bg); border-bottom: 1px solid transparent;
+    position: sticky; top: var(--page-head-height); z-index: 3; background: var(--bg); border-bottom: 1px solid transparent;
     font-size: 10.5px; font-weight: var(--weight-bold); letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint);
   }
   .gutHead[data-gut="1"], .rule[data-gut="1"] { grid-column: 3; }

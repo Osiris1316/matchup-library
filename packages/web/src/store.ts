@@ -2,7 +2,7 @@
 // emit() to re-render. Components read it directly. This mirrors how the first
 // version worked, so the saving and undo logic carries over unchanged.
 import { useSyncExternalStore } from 'react';
-import { isKnownPath, legacyPath, refFromPath, type CivTab } from './app/paths';
+import { civIdFromSlug, isKnownPath, legacyPath, refFromPath, type CivTab } from './app/paths';
 import { currentPath } from './app/navigation';
 import {
   Library, emptyDefs, type Age, type BuilderRow, type ChangeEntry, type DefType, type Intent, type ItemKind, type LibraryData,
@@ -89,6 +89,10 @@ export const S = {
   // The page to reopen on the next visit (the address is the source of truth for
   // which page is showing; see app/router.tsx).
   lastPath: null as string | null,
+  // The civ page you looked at last: the menu's Civs opens it.
+  lastCiv: '',
+  // The menu drawer (app/Menu.tsx).
+  menuOpen: false,
   ui: {
     // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
     library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
@@ -155,7 +159,7 @@ const PREFS = 'matchup-library-prefs-v2';
 export function loadPrefs(): void {
   try {
     const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean; me?: string | null; folded?: string[]; foldFaded?: boolean }; versus?: Partial<typeof S.ui.versus>;
-      lastPath?: string; lastView?: string; ref?: typeof S.refDefaults };
+      lastPath?: string; lastView?: string; lastCiv?: string; ref?: typeof S.refDefaults };
     if (p.check) Object.assign(S.ui.check, p.check);
     if (p.versus) Object.assign(S.ui.versus, p.versus);
     if (p.civ && (p.civ.tab === 'stages' || p.civ.tab === 'tags')) S.ui.civ.tab = p.civ.tab;
@@ -166,6 +170,7 @@ export function loadPrefs(): void {
     // lastView is the first version's name for it, as a hash route.
     const last = p.lastPath || (p.lastView ? legacyPath('#' + p.lastView) : null);
     if (last && isKnownPath(last)) S.lastPath = last;
+    if (typeof p.lastCiv === 'string') S.lastCiv = p.lastCiv;
     if (p.ref) S.refDefaults = p.ref;
   } catch { /* storage unavailable */ }
 }
@@ -173,7 +178,7 @@ export function savePrefs(): void {
   try {
     const c = S.ui.check;
     localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen, me: S.ui.civ.me, folded: S.ui.civ.folded, foldFaded: S.ui.civ.foldFaded }, versus: S.ui.versus,
-      lastPath: S.lastPath, ref: S.refDefaults }));
+      lastPath: S.lastPath, lastCiv: S.lastCiv, ref: S.refDefaults }));
   } catch { /* storage unavailable */ }
 }
 
@@ -183,6 +188,9 @@ export function savePrefs(): void {
 export function onPageChange(): void {
   const path = currentPath();
   S.sheet = null;
+  S.menuOpen = false;
+  const civ = /^\/civs\/([^/]+)/.exec(path);
+  if (civ) S.lastCiv = civIdFromSlug(civ[1] as string);
   if (!(S.toast && Date.now() - S.toast.at < 1500)) S.toast = null;
   // A reference reopens as the references list; it may be gone by next time.
   if (isKnownPath(path)) S.lastPath = refFromPath(path) ? '/refs' : path;

@@ -4,7 +4,7 @@
 
    Breakpoints can't be variables in a media query, so they live here as a note
    and in kit/breakpoints.ts for code:
-     wide   min-width: 1100px   desk layout, top tab bar, lines between cards
+     wide   min-width: 1100px   desk layout, lines between cards
      phone  max-width: 640px    single column tweaks */
 
 :root {
@@ -42,11 +42,11 @@
   --r: var(--radius-md);
 
   /* Layers, lowest first */
-  --z-lines: 1; --z-card: 2; --z-head: 5; --z-nav: 6; --z-safe-top: 10; --z-scrim: 20; --z-sheet: 21; --z-toast: 30;
+  --z-lines: 1; --z-card: 2; --z-head: 5; --z-safe-top: 10; --z-scrim: 20; --z-sheet: 21; --z-toast: 30;
 
   /* Fixed sizes the layout depends on */
-  --nav-height-wide: 53px;
-  /* The sticky page head: 44px row, 8px and 6px padding, 1px border. */
+  /* The sticky page head's height: measured by app/PageHead.tsx as it draws
+     (it grows when its tools wrap on a phone); this is its one-row height. */
   --page-head-height: 59px;
   --tap: 44px;
 

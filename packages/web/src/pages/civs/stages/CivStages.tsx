@@ -13,7 +13,6 @@ import {
 import { L, S, emit, savePrefs } from '../../../store';
 import { paths, readCivView } from '../../../app/paths';
 import { go } from '../../../app/navigation';
-import { MapGroups } from '../../../components/bits';
 import { Icon } from '../../../components/Icon';
 import { StepPills } from '../../../components/Pill';
 import { PlayCard, type CardOutline } from '../../../kit/play-card/PlayCard';
@@ -25,6 +24,7 @@ import { StagesRail } from './StagesRail';
 import { StagesKey } from './StagesKey';
 import { myCivFor, pickedAges, picksFrom, placeOk, planRows } from './view';
 import { focusOrder, foldAll, isFolded, toggleFold, type FamilyView, type FoldState } from './order';
+import { CivHead } from '../CivHead';
 import s from './CivStages.module.css';
 
 const OUTLINE: Record<StageCard['tier'], CardOutline> = { documented: 'solid', standard: 'solid', parts: 'dashed', open: 'faint' };
@@ -124,7 +124,7 @@ function measurePath(el: HTMLElement, picks: Picks): Line[] {
   return out;
 }
 
-export function CivStages({ cid, tabs }: { cid: string; tabs: React.ReactNode }) {
+export function CivStages({ cid }: { cid: string }) {
   const { search } = useLocation();
   const host = useRef<HTMLDivElement | null>(null);
   const view = readCivView(search);
@@ -146,38 +146,30 @@ export function CivStages({ cid, tabs }: { cid: string; tabs: React.ReactNode })
   };
   const onPick = (age: Age, id: string) => setPicks(togglePick(picks, age, id));
   const stateOf = (age: Age, id: string) => cardState(routes, picks, age, id);
-  const [dark, feudal, castle] = columns;
-  const ways = (n: number, word: string) => (n === 1 ? '1 way ' : n + ' ways ') + word;
-  const documented = plans.filter((x) => x.tier === 'documented').length;
-  const summary = [ways(dark ? dark.count : 0, 'through Dark'), (feudal ? feudal.count : 0) + ' through Feudal', (castle ? castle.count : 0) + ' into early Castle'].join(', ')
-    + '. ' + plural(documented, 'documented game plan') + '.';
   const narrowing = pickedAges(picks).length > 0;
   const familyNames = [...new Set(columns.flatMap((c) => c.families.map((f) => f.name)))];
   // How many cards in an age go with the picks, for its heading.
   const withPath = (c: StageColumn) => c.families.reduce((n, f) => n + f.cards.filter((x) => stateOf(c.age, x.id) === 'lit').length, 0);
+  // The page's own tools, in its head.
+  const tools = (
+    <>
+      <button type="button" className={s.toggle} data-act="stg-open" aria-pressed={u.showOpen} onClick={() => { u.showOpen = !u.showOpen; savePrefs(); emit(); }}>
+        {u.showOpen ? 'Hide plays not seen' : 'Show plays not seen'}
+      </button>
+      <span className={s.foldAll}>
+        <button type="button" className={s.textBtn} data-act="stg-expand-all" onClick={() => saveFold(cid, foldAll(familyNames, foldState(cid), false))}>Expand all</button>
+        <button type="button" className={s.textBtn} data-act="stg-collapse-all" onClick={() => saveFold(cid, foldAll(familyNames, foldState(cid), true))}>Collapse all</button>
+      </span>
+      <button type="button" className={'btn btn-sm btn-outline ' + s.keyBtn} data-act="stg-key" aria-expanded={u.showKey} onClick={() => { u.showKey = !u.showKey; emit(); }}>How to read</button>
+    </>
+  );
   return (
-    <div className={s.stages}>
-      <div className={s.bar}>
-        <div className="cv-tabs">{tabs}</div>
-        <span className={s.summary}>{summary}</span>
-        <button type="button" className={s.toggle} data-act="stg-open" aria-pressed={u.showOpen} onClick={() => { u.showOpen = !u.showOpen; savePrefs(); emit(); }}>
-          {u.showOpen ? 'Hide plays not seen' : 'Show plays not seen'}
-        </button>
-        <label className="label" htmlFor="stg-place">Map</label>
-        <select id="stg-place" className={'select ' + s.mapSelect} value={placeKey} onChange={(e) => show({ map: e.target.value })}>
-          <option value="any:">Any map</option>
-          <optgroup label="Any map of a type">{L.activeTypes().map((t) => <option key={t.id} value={'type:' + t.id}>Any {t.name.toLowerCase()} map</option>)}</optgroup>
-          <MapGroups prefix="map:" />
-        </select>
-        <span className={s.foldAll}>
-          <button type="button" className={s.textBtn} data-act="stg-expand-all" onClick={() => saveFold(cid, foldAll(familyNames, foldState(cid), false))}>Expand all</button>
-          <button type="button" className={s.textBtn} data-act="stg-collapse-all" onClick={() => saveFold(cid, foldAll(familyNames, foldState(cid), true))}>Collapse all</button>
-        </span>
-        <button type="button" className="btn btn-sm btn-outline" data-act="stg-key" aria-expanded={u.showKey} onClick={() => { u.showKey = !u.showKey; emit(); }}>How to read</button>
-      </div>
+    <>
+      <CivHead cid={cid} tab="stages" tools={tools} />
+      <main className={'main ' + s.page}>
       {u.showKey && <StagesKey />}
       <div className={s.board} ref={host} data-narrowing={narrowing ? '' : undefined}>
-        <StagesRail cid={cid} vp={vp} placeKey={placeKey} picks={picks} rows={rows} routes={routes} me={me} setPicks={setPicks} />
+        <StagesRail cid={cid} vp={vp} placeKey={placeKey} picks={picks} rows={rows} routes={routes} me={me} setPicks={setPicks} onMap={(key) => show({ map: key })} />
         {columns.map((c) => (
           <span key={c.age} className={s.head} data-age={c.age}>
             <span className={s.headName}>{STAGE_NAME[c.age]}</span>
@@ -191,6 +183,7 @@ export function CivStages({ cid, tabs }: { cid: string; tabs: React.ReactNode })
         {columns.map((c) => <Column key={c.age} cid={cid} col={c} stateOf={stateOf} me={me} vp={vp} narrowing={narrowing} onPick={onPick} />)}
         <LineLayer lines={lines} />
       </div>
-    </div>
+      </main>
+    </>
   );
 }

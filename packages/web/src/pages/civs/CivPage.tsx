@@ -1,22 +1,22 @@
-// One civ's page: its stages (plays per age and game plans), or its tags.
+// One civ's page: its stages (plays per age, the rail, your path), or its tags.
 import { Link, useParams } from 'react-router';
 import { AGES, ITEM_WORD, STAGE_NAME, guideTitle, lookOf, placeKey, plural, tagField, tagTargetId, targetField, targetId, type ItemKind, type TagWithId, type UseLook } from '@matchup-library/core';
 import { L, S, emit, savePrefs, useStore, type CivTab } from '../../store';
-import { copyFromParent, openBulk, openDef, openTagSheet, restoreTag } from '../../actions';
+import { copyFromParent, openBulk, openTagSheet, restoreTag } from '../../actions';
 import { civIdFromSlug, paths } from '../../app/paths';
-import { go } from '../../app/navigation';
-import { Flag, hasFlag } from '../../components/Flag';
 import { Icon } from '../../components/Icon';
-import { PageHead, Seg } from '../../components/bits';
+import { PageHead } from '../../components/bits';
 import { PlanStages, SplitPill, StepPills } from '../../components/Pill';
 import { CivStages } from './stages/CivStages';
+import { CivHead } from './CivHead';
 
 export function CivPage({ tab }: { tab: CivTab }) {
   useStore();
   const { civ: slug = '' } = useParams();
   const cid = civIdFromSlug(slug);
   const c = L.civ(cid);
-  if (!c) return <><PageHead title="Civ" back={paths.civs()} /><main className="main"><p className="empty">That civ isn't in the library.</p></main></>;
+  if (!c) return <><PageHead title="Civ" back={paths.civs()} /><main className="main"><p className="empty">That civ isn't in the library. <Link className="ulink" to={paths.civs()}>See all civs</Link>.</p></main></>;
+  if (tab === 'stages') return <CivStages cid={cid} />;
   const mine = L.allTags().filter((t) => t.civ === cid);
   const active = mine.filter((t) => t.active !== false);
   const retired = mine.filter((t) => t.active === false);
@@ -57,23 +57,12 @@ export function CivPage({ tab }: { tab: CivTab }) {
   const parent = c.parent ? L.civ(c.parent) : null;
   const parentTags = parent ? L.activeTags().filter((t) => t.civ === parent.id) : [];
   const u = S.ui.civ;
-  const mark = c.short && c.short !== c.name ? c.short : '';
   // The tab is part of the address; the last one used is what links to a civ open on.
   if (u.tab !== tab) { u.tab = tab; savePrefs(); }
-  const tabs = (
-    <Seg label="Show" act="cv-tab" options={[['stages', 'Stages'], ['tags', 'Tags']] as [CivTab, string][]} current={tab}
-      onPick={(v) => go(paths.civ(cid, v), { replace: true, keepScroll: true })} />
-  );
-  const head = (
-    <PageHead title={c.name} back={paths.civs()} mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
-      aside={<button type="button" className="head-link" data-act="cv-edit" onClick={() => openDef('civs', cid)}>Edit civ</button>} />
-  );
-  if (tab === 'stages') return <>{head}<main className="main"><CivStages cid={cid} tabs={tabs} /></main></>;
   return (
     <>
-      {head}
+      <CivHead cid={cid} tab="tags" />
       <main className="main narrow">
-        <div className="cv-tabs">{tabs}</div>
         {parent && parentTags.length > 0 && !active.length && (
           <div className="panel">
             <span className="hint">{c.name} is a variant of {parent.name}, which has {plural(parentTags.length, 'tag')}. Copy them here, then change what differs.</span>

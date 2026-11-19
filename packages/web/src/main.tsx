@@ -7,6 +7,7 @@ import { hasPendingSaves, loadState } from './api/client';
 import { legacyPath } from './app/paths';
 import { go } from './app/navigation';
 import { createAppRouter } from './app/router';
+import { closeMenu } from './app/Menu';
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/legacy.css';
@@ -21,7 +22,11 @@ void loadState();
 const router = createAppRouter();
 
 window.addEventListener('hashchange', () => { const to = legacyPath(location.hash); if (to) go(to, { replace: true }); });
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && S.sheet) backSheet(); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if (S.menuOpen) closeMenu();
+  else if (S.sheet) backSheet();
+});
 // Pick up changes made on another device when you come back to the page.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.dbState === 'ready' && !S.sheet && !hasPendingSaves() && Date.now() - S.loadedAt > 30000) void loadState(true);
