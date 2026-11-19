@@ -23,7 +23,8 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/web/src/pages/` | One folder per page: the Library, civs and a civ's page, maps, references, Versus and Check. |
 | `packages/web/src/kit/` | Reusable pieces that only draw what they're given, each with its own styles: pills, the play card, lines between cards. |
 | `packages/web/src/styles/` | `tokens.css` (colors, space, type, corners), `base.css`, and `legacy.css` for page styles still to move into modules. |
-| `packages/web/src/pages/civs/CivStages.tsx` | A civ's stages: its plays per age, its game plans, and the path through a picked game plan. |
+| `packages/web/src/pages/civs/stages/` | A civ's stages: its plays per age, the rail, narrowing by picks, and your answers. |
+| `packages/core/src/routes.ts` | Routes: the ways a civ's game has been written down age by age (game plans, branches, games), and how picks narrow by them. |
 | `packages/web/src/pages/versus/VersusPage.tsx` | Versus: your game plan against theirs, with branches, triggers and the answer. |
 | `packages/web/public/flags/` | Civ flags, from the league manager. |
 | `packages/web/public/icons/` | The aoe4world icons the library uses (see Credits). |
@@ -75,9 +76,15 @@ The aoe4world data lists, for some units and buildings, the civs that get them e
 
 ## A civ's stages
 
-A civ's page opens on **Stages**, built for a wide screen: the civ's plays in columns for Dark, Feudal and early Castle, grouped by family, and its game plans underneath. A card's outline shows the evidence: solid for tagged, seen in a game or guide, or standard (every step is something every civ does); dashed for from parts (each step documented, never seen together); faint dashed for not seen (possible, nothing documented). Plays the civ can't do in that age are left out, and each column says which elements aren't open to the civ there.
+A civ's page opens on **Stages**, built for a wide screen: a rail on the left, then the civ's plays in columns for Dark, Feudal and early Castle, grouped by family. A card's outline shows the evidence: solid for tagged, seen in a game or guide, or standard (every step is something every civ does); dashed for from parts (each step documented, never seen together); faint dashed for not seen (possible, nothing documented). Plays the civ can't do in that age are left out, and each column says which elements aren't open to the civ there. **How to read** in the bar opens the key.
 
-Pick a game plan to light up its plays and draw the path between them; pick a play to see which game plans use it. The map filter works as in Check. **Tags** has the tag lists as before. On a phone the ages stack and the path isn't drawn.
+**Narrowing.** Pick a card in any age and the rest of that age fades. In the other ages, plays that a game plan, one of its branches, or a logged game has together with your picks stay lit; the rest fade but stay clickable. It works both ways: pick a Feudal play first and Dark shows what leads there. Pick a card again to clear it. The picks, and the map filter, are in the address, so a narrowed view can be bookmarked.
+
+**The rail** holds the civ you play, your path and the game plans. The game plans shrink to the ones that go your way; picking one fills in all three ages, and its branches show under it. When your path is a game plan, the rail says which, with Why, Tag, Edit and Answer it in Versus. When no game plan goes that way, it offers to save the path as a new one, tagged to the civ.
+
+**Your answers.** With the civ you play chosen, each of their cards shows your branch that answers it (a branch on one of your game plans whose trigger is that play, or one of its elements in that age) and its status, or "No answer yet". Game plans in the rail show your answer to them. Choose nobody to hide this.
+
+**Tags** has the tag lists as before. On a phone the rail sits above the ages, the game plans become a dropdown, and no lines are drawn.
 
 ## Deploy
 

@@ -9,7 +9,7 @@ import { Flag, hasFlag } from '../../components/Flag';
 import { Icon } from '../../components/Icon';
 import { PageHead, Seg } from '../../components/bits';
 import { PlanStages, SplitPill, StepPills } from '../../components/Pill';
-import { CivStages } from './CivStages';
+import { CivStages } from './stages/CivStages';
 
 export function CivPage({ tab }: { tab: CivTab }) {
   useStore();
@@ -68,7 +68,7 @@ export function CivPage({ tab }: { tab: CivTab }) {
     <PageHead title={c.name} back={paths.civs()} mark={hasFlag(cid) ? '' : mark} flag={<Flag id={cid} lg />}
       aside={<button type="button" className="head-link" data-act="cv-edit" onClick={() => openDef('civs', cid)}>Edit civ</button>} />
   );
-  if (tab === 'stages') return <>{head}<main className="main stages-main"><CivStages cid={cid} tabs={tabs} /></main></>;
+  if (tab === 'stages') return <>{head}<main className="main"><CivStages cid={cid} tabs={tabs} /></main></>;
   return (
     <>
       {head}

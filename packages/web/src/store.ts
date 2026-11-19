@@ -78,8 +78,6 @@ export type MapsSeg = 'maps' | 'features' | 'mapTypes';
 export type CheckSeg = 'plans' | 'plays' | 'elements' | 'mine';
 export type RefsSeg = 'all' | 'mine' | 'games' | 'guides';
 export type { CivTab };
-// What's picked on the civ stages page: one play, or a game plan and its plays.
-export type CivSel = { kind: 'play' | 'plan'; id: string };
 
 export const S = {
   dbState: 'connecting' as DbState,
@@ -95,9 +93,11 @@ export const S = {
     // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
     library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
     civs: { showRetired: false },
-    // sel belongs to the civ in selFor; another civ's page starts with nothing picked.
     // tab: the civ page links open on, remembered from the last one used.
-    civ: { showRetired: false, tab: 'stages' as CivTab, sel: null as CivSel | null, selFor: '', place: 'any:', showParts: false, showOpen: true },
+    // me: the civ you play, for your answers on a civ's stages ('' for nobody,
+    // null until chosen, which means the civ Check uses). The picks and the
+    // map being viewed live in the address.
+    civ: { showRetired: false, tab: 'stages' as CivTab, me: null as string | null, showParts: false, showOpen: true, showKey: false },
     maps: { seg: 'maps' as MapsSeg, showRetired: false },
     check: { me: 'chinese', opp: 'ottomans', place: 'any:', seg: 'plays' as CheckSeg, showElsewhere: false },
     // The last Versus pairing, to reopen /versus on. The address holds the one showing.
@@ -150,12 +150,13 @@ export function showToast(text: string, warn = false, undoId: string | null = nu
 const PREFS = 'matchup-library-prefs-v2';
 export function loadPrefs(): void {
   try {
-    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean }; versus?: Partial<typeof S.ui.versus>;
+    const p = JSON.parse(localStorage.getItem(PREFS) || '{}') as { check?: Partial<typeof S.ui.check>; civ?: { tab?: CivTab; showOpen?: boolean; me?: string | null }; versus?: Partial<typeof S.ui.versus>;
       lastPath?: string; lastView?: string; ref?: typeof S.refDefaults };
     if (p.check) Object.assign(S.ui.check, p.check);
     if (p.versus) Object.assign(S.ui.versus, p.versus);
     if (p.civ && (p.civ.tab === 'stages' || p.civ.tab === 'tags')) S.ui.civ.tab = p.civ.tab;
     if (p.civ && typeof p.civ.showOpen === 'boolean') S.ui.civ.showOpen = p.civ.showOpen;
+    if (p.civ && typeof p.civ.me === 'string') S.ui.civ.me = p.civ.me;
     // lastView is the first version's name for it, as a hash route.
     const last = p.lastPath || (p.lastView ? legacyPath('#' + p.lastView) : null);
     if (last && isKnownPath(last)) S.lastPath = last;
@@ -165,7 +166,7 @@ export function loadPrefs(): void {
 export function savePrefs(): void {
   try {
     const c = S.ui.check;
-    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen }, versus: S.ui.versus,
+    localStorage.setItem(PREFS, JSON.stringify({ check: { me: c.me, opp: c.opp, place: c.place, seg: c.seg }, civ: { tab: S.ui.civ.tab, showOpen: S.ui.civ.showOpen, me: S.ui.civ.me }, versus: S.ui.versus,
       lastPath: S.lastPath, ref: S.refDefaults }));
   } catch { /* storage unavailable */ }
 }

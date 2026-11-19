@@ -30,3 +30,9 @@ button.card { cursor: pointer; }
 .badge { flex: 0 0 auto; font-size: var(--text-xs); color: var(--muted); }
 .steps { display: block; min-width: 0; }
 .note { font-size: var(--text-xs); color: var(--warn); }
+.detail { padding-top: var(--space-1); border-top: 1px solid var(--line-soft); font-size: var(--text-xs); color: var(--fg-2); }
+.detail[data-tone="gap"] { color: var(--faint); }
+
+/* Dimmed: not on the path being looked at. Still clickable, and it lifts on hover. */
+.card[data-dimmed] { opacity: 0.4; transition: opacity 120ms ease; }
+.card[data-dimmed]:hover, .card[data-dimmed]:focus-visible { opacity: 0.85; }

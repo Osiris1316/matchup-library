@@ -6,6 +6,9 @@ export type CivTab = 'stages' | 'tags';
 export type RefKind = 'game' | 'guide';
 // Versus: their civ and game plan, yours.
 export interface VersusPicks { them: string; their: string; me: string; mine: string }
+// A civ's stages: a play picked per age, and the map being viewed (a place key, such as map:dry-arabia).
+export interface CivView { dark?: string; feudal?: string; castle?: string; map?: string }
+const CIV_VIEW_KEYS: (keyof CivView)[] = ['dark', 'feudal', 'castle', 'map'];
 const VERSUS_KEYS: (keyof VersusPicks)[] = ['them', 'their', 'me', 'mine'];
 
 // Civ ids use underscores; addresses use hyphens (order_of_the_dragon, order-of-the-dragon).
@@ -15,7 +18,12 @@ export const civIdFromSlug = (slug: string): string => String(slug).replace(/-/g
 export const paths = {
   library: () => '/library',
   civs: () => '/civs',
-  civ: (id: string, tab: CivTab = 'stages') => '/civs/' + civSlug(id) + (tab === 'tags' ? '/tags' : ''),
+  civ: (id: string, tab: CivTab = 'stages', view: CivView = {}) => {
+    const q = new URLSearchParams();
+    if (tab === 'stages') CIV_VIEW_KEYS.forEach((k) => { const v = view[k]; if (v && !(k === 'map' && v === 'any:')) q.set(k, v); });
+    const s = q.toString();
+    return '/civs/' + civSlug(id) + (tab === 'tags' ? '/tags' : '') + (s ? '?' + s : '');
+  },
   maps: () => '/maps',
   refs: () => '/refs',
   ref: (kind: RefKind, id: string) => '/refs/' + kind + '/' + encodeURIComponent(id),
@@ -36,6 +44,13 @@ export function readVersus(search: string): Partial<VersusPicks> {
   const q = new URLSearchParams(search);
   const out: Partial<VersusPicks> = {};
   VERSUS_KEYS.forEach((k) => { const v = q.get(k); if (v) out[k] = v; });
+  return out;
+}
+
+export function readCivView(search: string): CivView {
+  const q = new URLSearchParams(search);
+  const out: CivView = {};
+  CIV_VIEW_KEYS.forEach((k) => { const v = q.get(k); if (v) out[k] = v; });
   return out;
 }
 

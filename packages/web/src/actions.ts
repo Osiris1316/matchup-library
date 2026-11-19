@@ -227,6 +227,16 @@ export async function setSubjectIntent(id: string, intent: Intent | null): Promi
   await commit('Set ' + x.name + ' to ' + (intent ? INTENT_NAME[intent].toLowerCase() : 'no intent'), [{ path: 'subjects/' + id, data: { ...clone(x), defaultIntent: intent } }]);
 }
 
+// A new game plan from a path picked on a civ's stages, tagged to that civ.
+export function openNewPlan(stages: Partial<Record<Age, string>>, civ: string | null): void {
+  openDef('gamePlans', null);
+  const sh = S.sheet;
+  if (!sh || sh.kind !== 'def') return;
+  AGES.forEach((a) => { const play = stages[a]; if (play) sh.draft.stages[a] = { play, notes: '' }; });
+  if (civ) sh.draft.civOn = [civ];
+  emit();
+}
+
 // opts.age: the age for a new play. opts.stageFor: the play is being made
 // from the game plan sheet in opts.back, for that age's stage.
 export function openDef(type: DefType, id: string | null, opts: { age?: Age; back?: Sheet | null; stageFor?: Age } = {}): void {

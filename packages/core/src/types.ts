@@ -65,6 +65,9 @@ export interface Play {
 // plan does in that age beyond the play itself.
 export interface Stage { play: string; notes: string }
 export type PlanStatus = 'idea' | 'studying' | 'practiced' | 'proven';
+export const PLAN_STATUS_NAME: Record<PlanStatus, string> = { idea: 'Idea', studying: 'Studying', practiced: 'Practiced', proven: 'Proven' };
+// Practiced or proven: tried in real games.
+export const isTested = (s: PlanStatus | null | undefined): boolean => s === 'practiced' || s === 'proven';
 export interface GamePlan {
   id: string; name: string; description: string; notes: string; status: PlanStatus | null;
   stages: Partial<Record<Age, Stage>>;

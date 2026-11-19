@@ -11,6 +11,7 @@ import { AGES, AGE_NAME, EL_TYPES, INTENT_NAME, STAGE_AGES, STAGE_NAME, type Age
   type GamePlan, type GamePlay, type Intent, type Kind, type LibraryData, type Link, type MapDef, type MapType, type Mark, type Place, type PlaceKind,
   type Play, type Stage, type Step, type Subject, type Tag, type Trigger, type UseLook } from './types';
 import { byName, cap, fmtDate, fmtTime, hostOf, lowerFirst, plural, slug } from './text';
+import { branchRoute, planRoute, type Picks, type Route } from './routes';
 
 export type TagWithId = Tag & { id: string };
 export type PlayRef = { gid: string; g: Game; p: GamePlay };
@@ -748,6 +749,53 @@ export class Library {
     if (ev.some((e) => e.kind === 'guide')) words.push(words.length ? 'guide' : 'In a guide');
     if (words[0] && /^\d/.test(words[0])) words[0] = 'In ' + words[0];
     return words.join(' · ');
+  }
+
+  // -------------------------------------------------------------- routes and answers
+  // Every route a civ's game has been written down taking (see routes.ts): its
+  // game plans (documented, or possible from its plays) with their branches,
+  // and what that civ's side did in each logged game.
+  civRoutes(civId: string, vp: Place): Route[] {
+    const out: Route[] = [];
+    this.civPlans(civId, vp).forEach(({ id }) => {
+      const g = this.plan(id);
+      if (!g) return;
+      out.push(planRoute(g));
+      this.branchesOf(g.id).forEach((b) => out.push(branchRoute(g, b)));
+    });
+    const sides = new Map<string, Picks>();
+    this.gamePlays(civId, vp).forEach(({ gid, p }) => {
+      const key = gid + ':' + p.runBy;
+      const stages = sides.get(key) || {};
+      // A play a side ran sets its age; a game plan fills the ages not set otherwise.
+      const play = p.playId ? this.play(p.playId) : null;
+      if (play && STAGE_AGES.includes(play.age)) stages[play.age] = play.id;
+      if (p.planId) stagesOf(this.plan(p.planId)).forEach(({ age, stage }) => { if (STAGE_AGES.includes(age) && !stages[age]) stages[age] = stage.play; });
+      sides.set(key, stages);
+    });
+    sides.forEach((stages, key) => { if (Object.keys(stages).length) out.push({ kind: 'game', game: key.split(':')[0], stages }); });
+    return out;
+  }
+  // The game plans you play as a civ: documented or possible for it, and any
+  // you've used in an answer for that civ (or for any civ).
+  yourPlans(myCiv: string, vp: Place): string[] {
+    const ids = new Set(this.civPlans(myCiv, vp).map((x) => x.id));
+    Object.values(this.data.answers || {}).forEach((a) => { if (a.active !== false && (!a.myCiv || a.myCiv === myCiv) && isActive(this.plan(a.myPlan))) ids.add(a.myPlan); });
+    return [...ids];
+  }
+  // Your branches that answer a play of theirs: a branch on one of your game
+  // plans whose trigger is that play, or one of its elements in that age.
+  answersToPlay(myCiv: string, oppCiv: string, playId: string, age: Age, vp: Place): { plan: string; branch: Branch }[] {
+    const out: { plan: string; branch: Branch }[] = [];
+    this.yourPlans(myCiv, vp).forEach((gid) => this.branchesOf(gid).forEach((b) => {
+      if (b.trigger && (!b.trigger.civ || b.trigger.civ === oppCiv) && this.triggerMatches(b.trigger, playId, age)) out.push({ plan: gid, branch: b });
+    }));
+    return out;
+  }
+  // Your answers to one of their game plans, for these civs (or for any civ).
+  answersToPlan(theirPlan: string, myCiv: string, oppCiv: string): [string, Answer][] {
+    return Object.entries(this.data.answers || {}).filter(([, a]) => a.active !== false && a.theirPlan === theirPlan && isActive(this.plan(a.myPlan))
+      && (!a.myCiv || a.myCiv === myCiv) && (!a.oppCiv || a.oppCiv === oppCiv));
   }
 
   // -------------------------------------------------------------- references

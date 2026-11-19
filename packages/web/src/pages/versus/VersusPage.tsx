@@ -5,7 +5,7 @@
 // line runs from what you scout on their side to the branch it sets off.
 import { useEffect, useRef } from 'react';
 import { Navigate, useLocation } from 'react-router';
-import { AGES, STAGE_AGES, STAGE_NAME, byName, isActive, type Age, type Branch, type GamePlan, type PlanStatus } from '@matchup-library/core';
+import { AGES, PLAN_STATUS_NAME as STATUS_NAME, STAGE_AGES, STAGE_NAME, byName, isActive, isTested as tested, type Age, type Branch, type GamePlan } from '@matchup-library/core';
 import { L, useStore } from '../../store';
 import { openDef } from '../../actions';
 import { hasLastPairing, lastPairing, openAnswer, openBranch, pairingFrom, rememberPairing, showPairing, swapSides } from '../../versus';
@@ -19,8 +19,6 @@ import { useMeasured } from '../../kit/lines/useMeasured';
 import { boxIn, elbow, type Box } from '../../kit/lines/geometry';
 
 const ANY = { kind: 'any' as const };
-const STATUS_NAME: Record<PlanStatus, string> = { idea: 'Idea', studying: 'Studying', practiced: 'Practiced', proven: 'Proven' };
-const tested = (s: PlanStatus | null | undefined) => s === 'practiced' || s === 'proven';
 
 // Game plans for one side: documented for that civ first, then the rest.
 function PlanSelect({ id, civ, value, onPick, mine }: { id: string; civ: string; value: string; onPick: (v: string) => void; mine: boolean }) {
