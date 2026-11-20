@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { civIdFromSlug, civSlug, isKnownPath, legacyPath, paths, readVersus, refFromPath, refPath } from '../src/app/paths';
+import { civIdFromSlug, civSlug, isKnownPath, legacyPath, mapItemFromPath, paths, readVersus, refFromPath, refPath } from '../src/app/paths';
 
 describe('paths', () => {
   it('builds civ addresses with hyphens, and reads them back', () => {
@@ -19,6 +19,15 @@ describe('paths', () => {
     expect(refFromPath('/refs/game/a%20b')).toEqual({ kind: 'game', id: 'a b' });
     expect(refFromPath('/refs/guide/x1/')).toEqual({ kind: 'guide', id: 'x1' });
     expect(refFromPath('/refs')).toBeNull();
+  });
+
+  it('builds and reads a map, feature or map type', () => {
+    expect(paths.mapItem('map', 'dry-arabia')).toBe('/maps/map/dry-arabia');
+    expect(paths.mapItem('feature', 'close gold')).toBe('/maps/feature/close%20gold');
+    expect(mapItemFromPath('/maps/type/open')).toEqual({ kind: 'type', id: 'open' });
+    expect(mapItemFromPath('/maps/feature/close%20gold/')).toEqual({ kind: 'feature', id: 'close gold' });
+    expect(mapItemFromPath('/maps/lake/x')).toBeNull();
+    expect(mapItemFromPath('/maps')).toBeNull();
     expect(refPath('ref-guide-x1')).toBe('/refs/guide/x1');
     expect(refPath('nonsense')).toBe('/refs');
   });

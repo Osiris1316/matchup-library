@@ -1,11 +1,51 @@
-/* References: the list beside the open reference (kit/layout/Panes). */
+/* References: the list beside the open reference (kit/layout/Panes), and the
+   open reference's summary and age board. */
 .main { display: block; padding: var(--space-7) max(var(--space-8), env(safe-area-inset-left, 0px)) var(--space-10); }
 .item[aria-current="page"] { background: var(--hover); box-shadow: inset 2px 0 0 var(--fg-2); }
 .item { padding-left: var(--space-3); padding-right: var(--space-3); border-radius: var(--radius-sm); }
-.detail { display: flex; flex-direction: column; gap: var(--space-10); max-width: 860px; }
+.detail { display: flex; flex-direction: column; gap: var(--space-10); min-width: 0; }
 .nothing { display: flex; flex-direction: column; gap: var(--space-4); max-width: 520px; padding-top: var(--space-16); color: var(--muted); }
 .nothingTitle { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); color: var(--fg-2); }
 
+/* What it is, in a line or two, with the link beside it. */
+.summary { display: flex; flex-direction: column; gap: var(--space-6); }
+.summaryText { display: flex; flex-direction: column; gap: var(--space-2); min-width: 0; }
+
+/* What happened: a heading with the add toggle, then the board. */
+.happened { display: flex; flex-direction: column; gap: var(--space-6); min-width: 0; }
+.happenedHead { display: flex; align-items: baseline; gap: var(--space-6); }
+.pickToggle { margin-left: auto; align-self: center; }
+
+/* A lane's heading: the civ, who played it, and the game plan it ran. */
+.laneWho { display: inline-flex; align-items: center; gap: var(--space-3); min-width: 0; }
+.laneCiv { font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.laneMeta { font-size: var(--text-sm); color: var(--muted); }
+.lanePlan { display: inline-flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); color: var(--muted); }
+.lanePlanBtn { padding: 0; background: none; border: 0; color: var(--fg); font-size: var(--text-md); font-weight: var(--weight-bold); text-decoration: underline; text-decoration-color: var(--dash); text-underline-offset: 3px; cursor: pointer; }
+.lanePlanBtn:hover { text-decoration-color: var(--fg-2); }
+
+/* Picking: what a lane could add in an age, under what it already has. */
+.options { display: flex; flex-direction: column; gap: var(--space-2); padding-top: var(--space-2); }
+.optionsHead { font-size: var(--text-2xs); font-weight: var(--weight-bold); letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.option {
+  display: flex; align-items: center; justify-content: space-between; gap: var(--space-4); width: 100%; min-height: 36px; padding: var(--space-2) var(--space-4);
+  text-align: left; color: var(--fg-2); background: transparent; border: 1px dashed var(--line); border-radius: var(--radius-sm); cursor: pointer;
+}
+.option:hover { background: var(--hover); border-color: var(--dash); color: var(--fg); }
+/* Goes with what's already picked: a firmer outline. Only possible: quieter. */
+.option[data-state="lit"] { border-style: solid; border-color: var(--dash); color: var(--fg); }
+.option[data-tier="open"]:not([data-state="lit"]) { color: var(--muted); }
+.option[data-tier="open"]:not([data-state="lit"]) > :last-child { opacity: 0.7; }
+.optionName { display: flex; align-items: baseline; gap: var(--space-3); font-size: var(--text-sm); font-weight: var(--weight-bold); min-width: 0; overflow: hidden; }
+.option > :last-child { flex: 0 0 auto; }
+.optionFamily { font-size: var(--text-2xs); font-weight: var(--weight-medium); color: var(--faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.more:global(.textlink) { min-height: 32px; width: auto; justify-content: flex-start; }
+.planPick { max-width: 320px; }
+.footLink:global(.textlink) { width: auto; min-height: 36px; }
+.addCiv { max-width: 360px; }
+
 @media (min-width: 1100px) {
   .main { padding: 0; }
+  .summary { flex-direction: row; align-items: flex-start; justify-content: space-between; gap: var(--space-12); }
+  .summary > a { flex: 0 0 auto; }
 }

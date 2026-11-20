@@ -13,7 +13,7 @@ export function RefsPage() {
     <>
       <PageHead title="References" />
       <main className={s.main}>
-        <Panes label="References" showing="list" list={<RefsList />} detail={<NoRefOpen count={L.refItems().length} />} />
+        <Panes label="References" showing="list" listWidth="minmax(300px, 360px)" list={<RefsList />} detail={<NoRefOpen count={L.refItems().length} />} />
       </main>
     </>
   );

@@ -11,7 +11,7 @@ export function CivPage({ tab }: { tab: CivTab }) {
   const { civ: slug = '' } = useParams();
   const cid = civIdFromSlug(slug);
   const c = L.civ(cid);
-  if (!c) return <><PageHead title="Civ" back={paths.civs()} /><main className="main"><p className="empty">That civ isn't in the library. <Link className="ulink" to={paths.civs()}>See all civs</Link>.</p></main></>;
+  if (!c) return <><PageHead title="Civ" back={paths.library()} /><main className="main"><p className="empty">That civ isn't in the library. <Link className="ulink" to={paths.civs()}>Open another civ</Link>.</p></main></>;
   // The tab is part of the address; the last one used is what links to a civ open on.
   const u = S.ui.civ;
   if (u.tab !== tab) { u.tab = tab; savePrefs(); }

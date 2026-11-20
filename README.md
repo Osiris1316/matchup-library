@@ -20,7 +20,7 @@ It's a pnpm workspace in TypeScript, laid out like the league manager: `core` ho
 | `packages/api/src/auth.ts` | The Access token check. |
 | `packages/web/src/` | The page (React, React Router and Vite). `packages/web/ARCHITECTURE.md` explains the layers and their rules. |
 | `packages/web/src/app/` | Routes and addresses (`paths.ts`), the layout, the page head and the menu. |
-| `packages/web/src/pages/` | One folder per page: the Library, civs and a civ's page, maps, references, Versus and Check. |
+| `packages/web/src/pages/` | One folder per page: the Library, a civ's page, maps, references, Versus and Check. |
 | `packages/web/src/kit/` | Reusable pieces that only draw what they're given, each with its own styles: pills, the play card, lines between cards. |
 | `packages/web/src/styles/` | `tokens.css` (colors, space, type, corners), `base.css`, and `legacy.css` for page styles still to move into modules. |
 | `packages/web/src/pages/civs/stages/` | A civ's stages: its plays per age, the rail, and narrowing by picks. |
@@ -76,13 +76,19 @@ The aoe4world data lists, for some units and buildings, the civs that get them e
 
 ## Moving around
 
-Every page's head starts with the menu button, which opens a drawer with the pages: the Library, Civs, Maps, References, Versus and Check, then All civs (the list, for adding, retiring and variants) and Upkeep. Civs opens the civ you looked at last, on the tab you used last. On a civ's page, the civ's name in the head is a dropdown: pick another civ to open it on the same tab and map. Escape, a click outside, or a choice closes the menu.
+Every page's head starts with the menu button, which opens a drawer with the pages: the Library, Civs, Maps, References, Versus and Check, then Upkeep. Civs opens the civ you looked at last, on the tab you used last (so does `/civs`). On a civ's page, the civ's name in the head is a dropdown and the list of civs: every civ with its variants set in under it, then the retired civs, then New civ. Pick another civ to open it on the same tab and map. A retired civ opens with a Retired mark, and Edit civ restores it; a new civ opens its own page once saved. Escape, a click outside, or a choice closes the menu.
 
 ## The other pages
 
-Every page uses the width of a wide screen. **All civs** is a grid of cards, one per civ with its variants inside it, and New civ in the head. **Maps** shows maps (grouped by type), features and map types as three columns side by side, each with its own New button; on a phone a switcher shows one at a time. **References** keeps the list on the left and the open reference on the right, with the open one marked in the list, and each side scrolls on its own; on a phone you see one at a time. **Check** puts the two civs, the map and what to show in one row, with the cards in a grid. A civ's **Tags** has game plans, plays and elements side by side, then what's been seen in references and the retired tags.
+Every page uses the width of a wide screen. **Maps** keeps a list on the left (maps grouped by type, features, or map types, with a switch) and the open one on the right, with Edit in the head. A map shows its type, its features, what civs have tagged for it or for its type or features, what in the library says it comes up there, and the games and guides played on it; a feature or a map type shows its maps and the same for all of them. **References** keeps the list on the left and the open reference on the right (see below). In both, the open one is marked in the list and each side scrolls on its own; on a phone you see one at a time. **Check** puts the two civs, the map and what to show in one row, with the cards in a grid. A civ's **Tags** has game plans, plays and elements side by side, then what's been seen in references and the retired tags.
 
 On a wide screen the editing sheets open as a full-height panel on the right, so the page stays in view beside them; on a phone they rise from the bottom as before. Upkeep is in the menu only.
+
+## A reference
+
+A reference opens as a line or two on what it is, with its link, then **what happened** on an age board: Dark, Feudal and early Castle across, a lane for each side down. A game has its opponent above and the player below, as on Versus; a guide has a lane for each civ it shows, with the civ it's about at the bottom. Each moment sits in its age: a play in its own age, an element in the age it was logged in, and a game plan across every age it has a stage for, named in the lane's heading. A play logged on its own takes the place of the same play from a game plan. Cards show the time, how it went and notes, and a line runs through each lane. A card opens its moment, to change it or take it out. Anything without an age on the board (nothing picked yet, an Imperial play, an element with several ages and none given) is listed under it.
+
+**Adding what happened** works like a civ's page rather than a form. Add what happened shows, under each age in each lane, what that side's civ could do, with what goes with the lane's path first and plays never seen for the civ behind a Show link. A pick goes straight in as a moment for that side, with Undo in the toast; open the card afterwards for its time, how it went and notes. Each lane can also add a whole game plan, or something else (an element, or a play not in the library) through the moment sheet. A guide can add a lane for another civ. A new reference opens ready to pick.
 
 ## A civ's stages
 

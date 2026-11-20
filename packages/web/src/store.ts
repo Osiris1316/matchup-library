@@ -96,7 +96,6 @@ export const S = {
   ui: {
     // sel: the element open in the editor ('' for none, 'new' for a new one), with its draft.
     library: { seg: 'elements' as LibrarySeg, showRetired: false, sel: '', draft: null as DefDraft | null, saved: '', q: '', lmCiv: '', subjectPick: false, subjectQ: '' },
-    civs: { showRetired: false },
     // tab: the civ page links open on, remembered from the last one used.
     // The picks and the map being viewed live in the address.
     // folded: families folded by hand, by name, on every civ. opened: faded

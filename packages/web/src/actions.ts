@@ -298,6 +298,8 @@ export async function saveDef(): Promise<void> {
   const back = sh.back && ((sh.back.kind === 'def' && sh.back.type === 'gamePlans') || sh.back.kind === 'branch') ? sh.back : null;
   const stageAge = sh.stageFor || null;
   const id = await saveDefDraft(sh.type, sh.id, sh.draft, () => { S.sheet = back || sh.back || null; });
+  // A new civ opens its own page: there's no list of civs to find it in.
+  if (id && sh.type === 'civs' && !sh.id) go(paths.civ(id, S.ui.civ.tab));
   if (id && back && stageAge) {
     back.draft.stages[stageAge] = { play: id, notes: (back.draft.stages[stageAge] || { notes: '' }).notes || '' };
     emit();
@@ -651,13 +653,14 @@ function blankMoment(d: Pick<MomentDraft, 'refKind' | 'gameId' | 'linkId' | 'sid
   return { refKind: d.refKind, gameId: d.gameId, linkId: d.linkId, pid: null, mid: null, side: d.side, civ: d.civ, mode: 'steps', builder: [], age: 'dark', plan: '', origPlay: null, name: '', at: '', note: '',
     outcome: null, prep: null, did: '', showHow: false, shows: d.shows };
 }
-export function openMoment(key: string | null): void {
+// `side` (a game) or `civ` (a guide) starts a new moment on that lane of the board.
+export function openMoment(key: string | null, start: { side?: 'player' | 'opponent'; civ?: string } = {}): void {
   const r = refFromView();
   if (!r) return;
   let d: MomentDraft;
   if (r.kind === 'game') {
     const p = key ? (r.g.plays || []).find((x) => x.pid === key) : null;
-    d = blankMoment({ refKind: 'game', gameId: r.id, linkId: null, side: S.lastSide || 'opponent', civ: '', shows: 'threat' });
+    d = blankMoment({ refKind: 'game', gameId: r.id, linkId: null, side: start.side || S.lastSide || 'opponent', civ: '', shows: 'threat' });
     if (p) {
       const mk = L.gameMark(r.id, p.pid);
       Object.assign(d, { pid: p.pid, side: p.runBy || 'opponent', ...targetDraft(p), at: mk && mk.m.at != null ? fmtTime(mk.m.at) : '', note: p.notes || '',
@@ -665,7 +668,7 @@ export function openMoment(key: string | null): void {
     }
   } else {
     const m = key ? (r.l.marks || []).find((x) => x.mid === key) : null;
-    d = blankMoment({ refKind: 'guide', gameId: null, linkId: r.id, side: 'opponent', civ: r.l.civ || '', shows: 'threat' });
+    d = blankMoment({ refKind: 'guide', gameId: null, linkId: r.id, side: 'opponent', civ: start.civ ?? (r.l.civ || ''), shows: 'threat' });
     if (m) Object.assign(d, { mid: m.mid, civ: m.civ || '', ...targetDraft(m), at: m.at != null ? fmtTime(m.at) : '', note: m.note || '', shows: m.shows || 'threat' });
   }
   openSheet({ kind: 'moment', draft: d, picking: !key });
@@ -744,6 +747,31 @@ export async function saveMoment(again: boolean): Promise<void> {
   const editing = !!(d.pid || d.mid);
   S.sheet = again ? { kind: 'moment', draft: blankMoment(d), picking: true, sid: nextSid() } : null;
   await commit((editing ? 'Edited a moment in ' : 'Added ' + what + ' to ') + title, writes, (editing ? 'Saved the moment.' : 'Added ' + what + '.') + (tgt.created ? ' New play added to Library.' : ''));
+}
+
+// A pick on a reference's board: the play or game plan goes straight in as a
+// moment for that lane, with no time or notes yet. Open the card to add them.
+export async function pickMoment(r: RefCtx, lane: { side?: 'player' | 'opponent'; civ?: string | null }, x: { playId?: string; planId?: string }): Promise<void> {
+  const what = x.planId ? L.planTitle(x.planId) : x.playId ? L.playTitle(x.playId) : '';
+  if (!what) return;
+  const writes: DocWrite[] = [];
+  let title: string;
+  if (r.kind === 'game') {
+    const g = clone(S.data.games[r.id] as Game);
+    title = L.refTitleGame(g);
+    const side = lane.side || 'opponent';
+    g.plays = [...(g.plays || []), { pid: newId(), runBy: side, planId: x.planId || null, playId: x.playId || null, elementId: null, age: null,
+      outcome: null, prep: null, answerId: null, did: '', notes: '' }];
+    writes.push({ path: 'games/' + r.id, data: g });
+    S.lastSide = side;
+  } else {
+    const lk = clone(S.data.links[r.id] as Link);
+    title = guideTitle(lk);
+    lk.marks = [...(lk.marks || []), { mid: newId(), at: null, gamePlayId: null, civ: lane.civ || null, elementId: null, playId: x.playId || null, planId: x.planId || null,
+      age: null, shows: 'threat', note: '' }];
+    writes.push({ path: 'links/' + r.id, data: lk });
+  }
+  await commit('Added ' + what + ' to ' + title, writes, 'Added ' + what + '.');
 }
 
 export async function deleteMoment(): Promise<void> {

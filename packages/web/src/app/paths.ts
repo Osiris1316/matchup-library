@@ -4,6 +4,9 @@
 
 export type CivTab = 'stages' | 'tags';
 export type RefKind = 'game' | 'guide';
+// What Maps can open: a map, a feature, or a map type.
+export type MapKind = 'map' | 'feature' | 'type';
+const MAP_KINDS: MapKind[] = ['map', 'feature', 'type'];
 // Versus: their civ and game plan, yours.
 export interface VersusPicks { them: string; their: string; me: string; mine: string }
 // A civ's stages: a play picked per age, and the map being viewed (a place key, such as map:dry-arabia).
@@ -25,6 +28,7 @@ export const paths = {
     return '/civs/' + civSlug(id) + (tab === 'tags' ? '/tags' : '') + (s ? '?' + s : '');
   },
   maps: () => '/maps',
+  mapItem: (kind: MapKind, id: string) => '/maps/' + kind + '/' + encodeURIComponent(id),
   refs: () => '/refs',
   ref: (kind: RefKind, id: string) => '/refs/' + kind + '/' + encodeURIComponent(id),
   versus: (picks: Partial<VersusPicks> = {}) => {
@@ -64,6 +68,12 @@ export function refPath(route: string): string {
 export function refFromPath(pathname: string): { kind: RefKind; id: string } | null {
   const m = /^\/refs\/(game|guide)\/([^/]+)\/?$/.exec(pathname);
   return m ? { kind: m[1] as RefKind, id: decodeURIComponent(m[2] as string) } : null;
+}
+
+// The map, feature or map type a path points at, if any.
+export function mapItemFromPath(pathname: string): { kind: MapKind; id: string } | null {
+  const m = /^\/maps\/(map|feature|type)\/([^/]+)\/?$/.exec(pathname);
+  return m && MAP_KINDS.includes(m[1] as MapKind) ? { kind: m[1] as MapKind, id: decodeURIComponent(m[2] as string) } : null;
 }
 
 // The first version used hash addresses (#library, #civ-ottomans, #ref-game-<id>).

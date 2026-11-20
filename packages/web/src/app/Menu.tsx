@@ -7,6 +7,7 @@ import { Link, useLocation } from 'react-router';
 import { L, S, emit, openSheet } from '../store';
 import { Icon, type IconName } from '../components/Icon';
 import { paths } from './paths';
+import { civTarget } from './civTarget';
 import s from './Menu.module.css';
 
 let opener: HTMLElement | null = null;
@@ -27,12 +28,6 @@ export function MenuButton() {
   );
 }
 
-// The civ the menu's Civs opens: the last one looked at, else the one Check
-// compares against, else the first.
-function civTarget(): string {
-  const ok = (id: string) => !!id && !!L.civ(id);
-  return [S.lastCiv, S.ui.check.opp].find(ok) || (L.activeCivs()[0] ? L.activeCivs()[0]!.id : '');
-}
 
 export function MenuDrawer() {
   const { pathname } = useLocation();
@@ -61,7 +56,7 @@ export function MenuDrawer() {
   const civId = civTarget();
   const pages: [string, IconName, string, string, boolean][] = [
     ['library', 'library', 'Library', paths.library(), pathname.startsWith('/library')],
-    ['civs', 'civs', 'Civs', civId ? paths.civ(civId, S.ui.civ.tab) : paths.civs(), civPage],
+    ['civs', 'civs', 'Civs', civId ? paths.civ(civId, S.ui.civ.tab) : paths.library(), civPage],
     ['maps', 'maps', 'Maps', paths.maps(), pathname.startsWith('/maps')],
     ['refs', 'refs', 'References', paths.refs(), pathname.startsWith('/refs')],
     ['versus', 'versus', 'Versus', paths.versus(), pathname.startsWith('/versus')],
@@ -84,7 +79,6 @@ export function MenuDrawer() {
           ))}
         </nav>
         <div className={s.rule} />
-        <Link className={s.link + ' ' + s.minor} to={paths.civs()} data-page="manage-civs" aria-current={on(pathname === '/civs')} onClick={() => { S.menuOpen = false; }}>All civs: add, retire and variants</Link>
         <button type="button" className={s.link + ' ' + s.minor} data-act="menu-upkeep" onClick={() => { S.menuOpen = false; openSheet({ kind: 'upkeep' }); }}>Upkeep</button>
       </div>
     </>

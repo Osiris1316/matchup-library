@@ -22,7 +22,7 @@ export function RefPage() {
     <>
       <PageHead title={title} back={paths.refs()} aside={<button type="button" className="head-link" data-act="rf-edit" onClick={() => openRefDetails(null, r)}>Edit details</button>} />
       <main className={s.main}>
-        <Panes label="References" showing="detail" list={<RefsList current={route} />} detail={<RefDetail r={r} />} />
+        <Panes label="References" showing="detail" listWidth="minmax(300px, 360px)" list={<RefsList current={route} />} detail={<RefDetail key={route} r={r} />} />
       </main>
     </>
   );

@@ -42,18 +42,21 @@ The rules (`@matchup-library/core`) stay outside the page: the page asks `L` (th
 | `kit/pills/Pill.tsx` | The element pill (tile colored by type, name by intent), the mini pill, a row of them, and the separators. `components/Pill.tsx` works out an element's look and draws these. |
 | `kit/play-card/PlayCard.tsx` | A play as a card: name, badge, steps, a warning note, a plain detail line; solid, dashed or faint outline; picked, marked and dimmed states; an `anchor` for lines. Used by a civ's stages and Versus. |
 | `kit/motion.ts` | Slides things to their new places when a change moves them (the browser's view transitions): `animate()` for a store change, `go(..., { animate: true })` for an address change, and `vtName()` for naming what moves. Skipped when the system asks for less motion. |
-| `kit/layout/AutoGrid.tsx` | A grid that fits as many columns as the width allows, each at least `min` pixels: All civs and Check. |
-| `kit/layout/Panes.tsx` | A list beside its open item. Wide: both panes side by side, the list at `listWidth`, each scrolling on its own under the page head. Phone: one pane at a time, chosen by `showing`. References. |
+| `kit/layout/AutoGrid.tsx` | A grid that fits as many columns as the width allows, each at least `min` pixels: Check, and the sections of an open map. |
+| `kit/layout/Panes.tsx` | A list beside its open item. Wide: both panes side by side, the list at `listWidth`, each scrolling on its own under the page head. Phone: one pane at a time, chosen by `showing`. References and Maps. |
+| `kit/age-board/AgeBoard.tsx` | Ages across, lanes down: an age heading row (sticky in a scrolling pane), then each lane as a heading over a cell per age, with an optional foot. The page fills the cells and passes `measure` for the lines, which the board draws under the cards. Phone: each lane stacks its ages, each with its own heading. A reference; Versus could move onto it. |
 | `kit/lines/` | Lines between cards: `geometry.ts` (pure, tested), `useMeasured` (measures after layout, on resize and when the host changes size; wide screens only) and `LineLayer` (draws the paths and labels). |
 
 ## A page built this way
 
 `pages/civs/stages/` is the first page rebuilt on these rules: `CivStages.tsx` lays it out, `StagesRail.tsx` and `StagesKey.tsx` are its parts, `view.ts` works out what it shows, `order.ts` sorts and folds its columns (pure, tested in `test/order.test.ts`), and `CivStages.module.css` holds all of its styles. The narrowing itself is in the rules (`packages/core/src/routes.ts`), with its own tests. Use it as the pattern for the next page.
 
-The other pages followed: `pages/civs/CivsPage.tsx` (All civs), `pages/civs/CivTags.tsx` (a civ's tags, split out of `CivPage.tsx`, which now only picks the tab), `pages/maps/MapsPage.tsx`, `pages/refs/` (`RefsList.tsx` and `RefDetail.tsx`, shared by the list page and a reference's page so the list stays put while the detail changes) and `pages/check/CheckPage.tsx`, each with its own `.module.css`. No page uses the old narrow column any more.
+The other pages followed: `pages/civs/CivTags.tsx` (a civ's tags, split out of `CivPage.tsx`, which now only picks the tab), `pages/maps/` and `pages/refs/` (each a list component and a detail component shared by the list page and the open item's page, so the list stays put while the detail changes) and `pages/check/CheckPage.tsx`, each with its own `.module.css`. No page uses the old narrow column any more, and there is no page listing civs: the civ picker in `pages/civs/CivHead.tsx` is that list, and `/civs` redirects to a civ (`app/civTarget.ts`).
+
+A reference's board is the second page built the stages way: `pages/refs/board.ts` places moments in ages (pure, tested in `test/board.test.ts`), `RefBoard.tsx` turns that into lanes, cards and pick options on the kit's `AgeBoard`, and `RefDetail.tsx` lays out the pane. Picking writes through `pickMoment` in `actions.ts`; everything else about a moment still goes through its sheet.
 
 **Sheets.** `app/SheetHost.tsx` places the sheet with its own module: a bottom sheet on a phone, a full-height panel on the right on a wide screen. The global `sheet` class stays on it because the legacy rules for what's inside a sheet (its fields, footer and lists) still hang off it; those move when the sheets do.
 
 ## Tests
 
-`pnpm test` runs the rules tests in `packages/core` (including routes and narrowing) and the page's own in `packages/web/test`: the addresses (including old hash ones), the line geometry, and the civ page's order and folding.
+`pnpm test` runs the rules tests in `packages/core` (including routes and narrowing) and the page's own in `packages/web/test`: the addresses (including old hash ones and Maps' own), the line geometry, the civ page's order and folding, and where a reference's moments land on its board.
